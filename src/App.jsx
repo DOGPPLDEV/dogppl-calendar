@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "./supabase.js";
+import Login from "./Login.jsx";
 
 const BRAND = { bone:"#F3F1EE", paw:"#181818", grass:"#565F4E", rust:"#9A4536", mud:"#A47E5C", sand:"#BFB3A5", darkGrass:"#333833", drySage:"#8C8A7E" };
 const PILLARS = {
@@ -446,6 +447,26 @@ function mergeDefaults(stored) {
 }
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    if (!supabase) { setAuthChecked(true); return; }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (!authChecked) return <div style={{minHeight:"100vh",background:BRAND.bone}}/>;
+  if (supabase && !session) return <Login />;
+
+  return <Calendar onSignOut={supabase ? () => supabase.auth.signOut() : null} />;
+}
+
+function Calendar({ onSignOut }) {
   const [placements, setPlacements] = useState({});
   const [drag, setDrag] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -656,10 +677,13 @@ export default function App() {
             <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:BRAND.drySage}}>DOG PPL</div>
             <div style={{fontSize:17,fontWeight:700,lineHeight:1.2}}>Content Calendar 2026</div>
           </div>
-          <div style={{marginLeft:"auto",display:"flex",gap:4}}>
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
             {[4,5,6,7,8,9,10,11].map(m=>(
               <button key={m} onClick={()=>setMonth(m)} style={{fontSize:12,padding:"4px 11px",borderRadius:20,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${month===m?BRAND.paw:BRAND.sand}`,background:month===m?BRAND.paw:"transparent",color:month===m?BRAND.bone:BRAND.drySage}}>{MONTH_NAMES[m]}</button>
             ))}
+            {onSignOut && (
+              <button onClick={onSignOut} title="Sign out" style={{fontSize:11,padding:"4px 10px",borderRadius:20,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${BRAND.sand}`,background:"transparent",color:BRAND.drySage,marginLeft:8}}>Sign out</button>
+            )}
           </div>
         </div>
 
