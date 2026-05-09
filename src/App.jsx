@@ -335,36 +335,69 @@ const CONCEPTS = [
   {id:"partner-1",title:"Partner feature post",            pillar:"Partners", tier:"T3", note:"Per partnership agreement. Tag partner. Coordinate copy/assets with them."},
   {id:"partner-2",title:"Partner story",                   pillar:"Partners", tier:"T3", note:"Story-format partner post. Swipe up if applicable."},
   {id:"partner-3",title:"Co-branded content",              pillar:"Partners", tier:"T2", note:"Heavier lift. Requires asset prep. Coordinate 2 weeks out."},
+  {id:"ev-01-promo",  title:"Mother's Day Sip & Stem — promo",            pillar:"Events", tier:"T3", note:"3-day-out promo for Mother's Day Sip & Stem with Just Food For Dogs."},
+  {id:"ev-01-day",    title:"Mother's Day Sip & Stem — day-of",           pillar:"Events", tier:"T3", note:"Day-of for Mother's Day Sip & Stem with Just Food For Dogs."},
+  {id:"ev-02-promo",  title:"Canvas & Cocktails — promo",                 pillar:"Events", tier:"T3", note:"3-day-out promo for Canvas & Cocktails with Ali Futrell Art (Juneshine Bev sponsor)."},
+  {id:"ev-02-day",    title:"Canvas & Cocktails — day-of",                pillar:"Events", tier:"T3", note:"Day-of for Canvas & Cocktails with Ali Futrell Art (Juneshine Bev sponsor)."},
+  {id:"ev-03-promo",  title:"Green Dog Dental Vaccine Pop Up — promo",    pillar:"Events", tier:"T3", note:"3-day-out promo for Vaccine Pop Up by Green Dog Dental."},
+  {id:"ev-03-day",    title:"Green Dog Dental Vaccine Pop Up — day-of",   pillar:"Events", tier:"T3", note:"Day-of for Vaccine Pop Up by Green Dog Dental."},
+  {id:"ev-04-promo",  title:"Small Dogs Big Party — promo",               pillar:"Events", tier:"T3", note:"3-day-out promo for Small Dogs Big Party presented by Small Matters."},
+  {id:"ev-04-day",    title:"Small Dogs Big Party — day-of",              pillar:"Events", tier:"T3", note:"Day-of for Small Dogs Big Party presented by Small Matters."},
+  {id:"ev-05-promo",  title:"Trivia Night — promo",                       pillar:"Events", tier:"T3", note:"3-day-out promo for Trivia Night."},
+  {id:"ev-05-day",    title:"Trivia Night — day-of",                      pillar:"Events", tier:"T3", note:"Day-of for Trivia Night."},
+  {id:"ev-06-promo",  title:"Memorial Day Drink Specials — promo",        pillar:"Events", tier:"T3", note:"3-day-out promo for Memorial Day Weekend Drink Specials."},
+  {id:"ev-06-day",    title:"Memorial Day Drink Specials — day-of",       pillar:"Events", tier:"T3", note:"Day-of for Memorial Day Weekend Drink Specials."},
+  {id:"ev-07-promo",  title:"CFC x Nordic Naturals — promo",              pillar:"Events", tier:"T3", note:"3-day-out promo for CFC x Nordic Naturals."},
+  {id:"ev-07-before", title:"CFC x Nordic Naturals — day-before reminder",pillar:"Events", tier:"T3", note:"Day-before reminder for CFC x Nordic Naturals."},
+  {id:"ev-07-day",    title:"CFC x Nordic Naturals — day-of",             pillar:"Events", tier:"T3", note:"Day-of for CFC x Nordic Naturals."},
+  {id:"ev-08-promo",  title:"Sounds and Hounds Pride Pregame — promo",    pillar:"Events", tier:"T3", note:"3-day-out promo for Sounds and Hounds Pride Pregame."},
+  {id:"ev-08-morning",title:"Sounds and Hounds Pride Pregame — morning story",pillar:"Events", tier:"T3", note:"Morning-of story for Sounds and Hounds Pride Pregame."},
+  {id:"ev-08-day",    title:"Sounds and Hounds Pride Pregame — day-of",   pillar:"Events", tier:"T3", note:"Day-of for Sounds and Hounds Pride Pregame."},
+  {id:"ev-09-promo",  title:"Dog Bowl Pottery Class — promo",             pillar:"Events", tier:"T3", note:"3-day-out promo for Creative Workshop Dog Bowl Pottery Class with Cruz Creations."},
+  {id:"ev-09-day",    title:"Dog Bowl Pottery Class — day-of",            pillar:"Events", tier:"T3", note:"Day-of for Creative Workshop Dog Bowl Pottery Class with Cruz Creations."},
+  {id:"ev-10-promo",  title:"Senior Dog Day — promo",                     pillar:"Events", tier:"T3", note:"3-day-out promo for Senior Dog Day Presented by Native Pet."},
+  {id:"ev-10-before", title:"Senior Dog Day — day-before reminder",       pillar:"Events", tier:"T3", note:"Day-before reminder for Senior Dog Day Presented by Native Pet."},
+  {id:"ev-10-day",    title:"Senior Dog Day — day-of",                    pillar:"Events", tier:"T3", note:"Day-of for Senior Dog Day Presented by Native Pet."},
+  {id:"ev-11-promo",  title:"Creatures of Habit Trivia — promo",          pillar:"Events", tier:"T3", note:"3-day-out promo for Creatures of Habit Trivia Night."},
+  {id:"ev-11-day",    title:"Creatures of Habit Trivia — day-of",         pillar:"Events", tier:"T3", note:"Day-of for Creatures of Habit Trivia Night."},
+  {id:"ev-12-day",    title:"Father's Day placeholder",                   pillar:"Events", tier:"T3", note:"Day-of Father's Day placeholder."},
+  {id:"ev-13-promo",  title:"Twitch Pet Awards Live Stream — promo",      pillar:"Events", tier:"T3", note:"3-day-out promo for Twitch Pet Awards Live Streaming Event."},
+  {id:"ev-13-day",    title:"Twitch Pet Awards Live Stream — day-of",     pillar:"Events", tier:"T3", note:"Day-of for Twitch Pet Awards Live Streaming Event."},
+  {id:"ev-14-promo",  title:"COH Canine Fitness Club — promo",            pillar:"Events", tier:"T3", note:"3-day-out promo for Creatures of Habit Canine Fitness Club."},
+  {id:"ev-14-day",    title:"COH Canine Fitness Club — day-of",           pillar:"Events", tier:"T3", note:"Day-of for Creatures of Habit Canine Fitness Club."},
+  {id:"ev-15-promo",  title:"COH Vaccine Pop Up — promo",                 pillar:"Events", tier:"T3", note:"3-day-out promo for Creatures of Habit Vaccine Pop Up."},
+  {id:"ev-15-day",    title:"COH Vaccine Pop Up — day-of",                pillar:"Events", tier:"T3", note:"Day-of for Creatures of Habit Vaccine Pop Up."},
 ];
 
 const EVENTS_DEFAULTS = {
-  "day-2026-4-7":  ["ev-01-p"],
-  "day-2026-4-10": ["ev-01-d","ev-02-p"],
-  "day-2026-4-13": ["ev-02-d"],
-  "day-2026-4-14": ["ev-04-p"],
-  "day-2026-4-15": ["ev-03-p"],
-  "day-2026-4-17": ["ev-04-d"],
-  "day-2026-4-18": ["ev-03-d","ev-05-p"],
-  "day-2026-4-20": ["ev-06-p"],
-  "day-2026-4-21": ["ev-05-d"],
-  "day-2026-4-22": ["ev-06-b"],
-  "day-2026-4-23": ["ev-06-d"],
-  "day-2026-5-2":  ["ev-07-p"],
-  "day-2026-5-3":  ["ev-08-p"],
-  "day-2026-5-5":  ["ev-07-m","ev-07-d"],
-  "day-2026-5-6":  ["ev-08-d"],
-  "day-2026-5-10": ["ev-09-p"],
-  "day-2026-5-12": ["ev-09-b"],
-  "day-2026-5-13": ["ev-09-d"],
-  "day-2026-5-15": ["ev-10-p"],
-  "day-2026-5-18": ["ev-10-d","ev-11-p"],
-  "day-2026-5-21": ["ev-11-d"],
-  "day-2026-5-23": ["ev-12-p"],
-  "day-2026-5-24": ["ev-13-p"],
-  "day-2026-5-25": ["ev-14-p"],
-  "day-2026-5-26": ["ev-12-d"],
-  "day-2026-5-27": ["ev-13-d"],
-  "day-2026-5-28": ["ev-14-d"],
+  "day-2026-4-7":  ["ev-01-promo"],
+  "day-2026-4-10": ["ev-01-day","ev-02-promo"],
+  "day-2026-4-13": ["ev-02-day"],
+  "day-2026-4-14": ["ev-03-promo"],
+  "day-2026-4-15": ["ev-04-promo"],
+  "day-2026-4-17": ["ev-03-day"],
+  "day-2026-4-18": ["ev-04-day","ev-05-promo"],
+  "day-2026-4-19": ["ev-06-promo"],
+  "day-2026-4-20": ["ev-07-promo"],
+  "day-2026-4-21": ["ev-05-day"],
+  "day-2026-4-22": ["ev-06-day","ev-07-before"],
+  "day-2026-4-23": ["ev-07-day"],
+  "day-2026-5-2":  ["ev-08-promo"],
+  "day-2026-5-3":  ["ev-09-promo"],
+  "day-2026-5-5":  ["ev-08-morning","ev-08-day"],
+  "day-2026-5-6":  ["ev-09-day"],
+  "day-2026-5-10": ["ev-10-promo"],
+  "day-2026-5-12": ["ev-10-before"],
+  "day-2026-5-13": ["ev-10-day"],
+  "day-2026-5-15": ["ev-11-promo"],
+  "day-2026-5-18": ["ev-11-day"],
+  "day-2026-5-21": ["ev-12-day"],
+  "day-2026-5-23": ["ev-13-promo"],
+  "day-2026-5-24": ["ev-14-promo"],
+  "day-2026-5-25": ["ev-15-promo"],
+  "day-2026-5-26": ["ev-13-day"],
+  "day-2026-5-27": ["ev-14-day"],
+  "day-2026-5-28": ["ev-15-day"],
 };
 
 function generateDays() {
@@ -611,13 +644,13 @@ function Calendar({ onSignOut }) {
             const placed=usedIds.has(c.id);
             const p=PILLARS[c.pillar]||PILLARS.Brand;
             return (
-              <div key={c.id} draggable onDragStart={e=>onDragStart(e,c,null)} style={{background:placed?"#2e2e2e":"#242424",borderLeft:`3px solid ${placed?p.color+"88":p.color}`,border:`1px solid ${placed?"#3a3a3a":"#333"}`,borderLeftWidth:3,borderRadius:4,padding:"6px 8px",marginBottom:4,cursor:"grab"}}>
-                <div style={{fontSize:12,fontWeight:placed?400:600,color:placed?"#888":BRAND.bone,lineHeight:1.3}}>{c.title}</div>
+              <div key={c.id} draggable onDragStart={e=>onDragStart(e,c,null)} style={{background:placed?"#2e2e2e":"#242424",borderLeft:`3px solid ${placed?p.color+"cc":p.color}`,border:`1px solid ${placed?"#3a3a3a":"#333"}`,borderLeftWidth:3,borderRadius:4,padding:"6px 8px",marginBottom:4,cursor:"grab"}}>
+                <div style={{fontSize:12,fontWeight:placed?400:600,color:placed?"#c4c4c4":BRAND.bone,lineHeight:1.3}}>{c.title}</div>
                 <div style={{display:"flex",gap:4,marginTop:3}}>
-                  <span style={{fontSize:9,color:placed?p.color+"99":p.color,textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
-                  <span style={{fontSize:9,color:"#555"}}>·</span>
-                  <span style={{fontSize:9,color:"#555"}}>{c.tier}</span>
-                  {placed&&<span style={{fontSize:9,color:"#666",marginLeft:"auto"}}>placed</span>}
+                  <span style={{fontSize:9,color:placed?p.color+"cc":p.color,textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
+                  <span style={{fontSize:9,color:"#777"}}>·</span>
+                  <span style={{fontSize:9,color:"#777"}}>{c.tier}</span>
+                  {placed&&<span style={{fontSize:9,color:"#999",marginLeft:"auto"}}>placed</span>}
                 </div>
               </div>
             );
