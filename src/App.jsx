@@ -4,16 +4,16 @@ import Login from "./Login.jsx";
 
 const BRAND = { bone:"#F3F1EE", paw:"#181818", grass:"#565F4E", rust:"#9A4536", mud:"#A47E5C", sand:"#BFB3A5", darkGrass:"#333833", drySage:"#8C8A7E" };
 const PILLARS = {
-  DOG:     { color:"#E06448", bg:"#FDEEE8", label:"DOG",        target:3 },
-  Culture: { color:"#B07840", bg:"#F9E5CE", label:"Culture",    target:2 },
-  Bond:    { color:"#8A6A52", bg:"#EDE3D7", label:"Bond",       target:2 },
-  Edu:     { color:"#B8920A", bg:"#FBF4D4", label:"Canine Edu", target:2 },
-  Brand:   { color:"#5E7A52", bg:"#DDE8D8", label:"Brand",      target:1 },
-  Timely:  { color:"#7B52B8", bg:"#E5D9F7", label:"Timely",     target:0 },
-  Paid:    { color:"#2D6DAE", bg:"#D6E6F5", label:"Paid Ad",    target:0 },
-  Events:  { color:"#D96A00", bg:"#FDE5C8", label:"Events",      target:0 },
-  Alerts:  { color:"#B52020", bg:"#FBDAD7", label:"Club Alerts", target:0 },
-  Partners:{ color:"#1E7A8A", bg:"#D4EEF5", label:"Partnerships",target:0 },
+  DOG:     { color:"#E06448", sidebarColor:"#F5896C", bg:"#FDEEE8", label:"DOG",        target:3 },
+  Culture: { color:"#B07840", sidebarColor:"#D49E64", bg:"#F9E5CE", label:"Culture",    target:2 },
+  Bond:    { color:"#8A6A52", sidebarColor:"#BFA088", bg:"#EDE3D7", label:"Bond",       target:2 },
+  Edu:     { color:"#B8920A", sidebarColor:"#E5BC2A", bg:"#FBF4D4", label:"Canine Edu", target:2 },
+  Brand:   { color:"#5E7A52", sidebarColor:"#92B584", bg:"#DDE8D8", label:"Brand",      target:1 },
+  Timely:  { color:"#7B52B8", sidebarColor:"#A684D6", bg:"#E5D9F7", label:"Timely",     target:0 },
+  Paid:    { color:"#2D6DAE", sidebarColor:"#5FA3D8", bg:"#D6E6F5", label:"Paid Ad",    target:0 },
+  Events:  { color:"#D96A00", sidebarColor:"#FF9836", bg:"#FDE5C8", label:"Events",      target:0 },
+  Alerts:  { color:"#B52020", sidebarColor:"#E25A5A", bg:"#FBDAD7", label:"Club Alerts", target:0 },
+  Partners:{ color:"#1E7A8A", sidebarColor:"#5BB4C8", bg:"#D4EEF5", label:"Partnerships",target:0 },
 };
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAY_NAMES_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -1006,20 +1006,20 @@ function Calendar({ onSignOut }) {
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"'Georgia',serif",background:BRAND.bone,color:BRAND.paw,overflow:"hidden"}}>
       {/* SIDEBAR */}
-      <div style={{width:248,flexShrink:0,background:BRAND.paw,color:BRAND.bone,display:"flex",flexDirection:"column",overflow:"hidden"}}
+      <div style={{width:248,flexShrink:0,background:BRAND.paw,color:BRAND.bone,display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"system-ui, -apple-system, 'Segoe UI', sans-serif"}}
         onDragOver={onDragOver} onDrop={onDropLib}>
         <div style={{padding:"14px 13px 10px",borderBottom:"1px solid #2a2a2a"}}>
           <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:BRAND.sand,marginBottom:6}}>Concept Library</div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search concepts…"
-            style={{width:"100%",background:"#1e1e1e",border:"none",borderRadius:4,padding:"6px 8px",fontSize:12,color:BRAND.bone,outline:"none",boxSizing:"border-box"}}/>
+            style={{width:"100%",background:"#1e1e1e",border:"none",borderRadius:4,padding:"6px 8px",fontSize:12,color:BRAND.bone,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           <div style={{display:"flex",gap:3,marginTop:7,flexWrap:"wrap"}}>
             {["ALL","DOG","Culture","Bond","Edu","Brand","Timely","Paid","Events","Alerts","Partners"].map(p=>(
-              <button key={p} onClick={()=>setFilterPillar(p)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:filterPillar===p?"none":"1px solid #333",background:filterPillar===p?(PILLARS[p]?.color||BRAND.grass):"transparent",color:filterPillar===p?"#fff":BRAND.drySage,letterSpacing:"0.04em",textTransform:"uppercase"}}>{p}</button>
+              <button key={p} onClick={()=>setFilterPillar(p)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:filterPillar===p?"none":"1px solid #333",background:filterPillar===p?(PILLARS[p]?.color||BRAND.grass):"transparent",color:filterPillar===p?"#fff":BRAND.drySage,letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:"inherit"}}>{p}</button>
             ))}
           </div>
           <div style={{display:"flex",gap:3,marginTop:5}}>
             {["ALL","T1","T2","T3"].map(t=>(
-              <button key={t} onClick={()=>setFilterTier(t)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:filterTier===t?"none":"1px solid #333",background:filterTier===t?BRAND.grass:"transparent",color:filterTier===t?"#fff":BRAND.drySage}}>{t==="ALL"?"All Tiers":t}</button>
+              <button key={t} onClick={()=>setFilterTier(t)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:filterTier===t?"none":"1px solid #333",background:filterTier===t?BRAND.grass:"transparent",color:filterTier===t?"#fff":BRAND.drySage,fontFamily:"inherit"}}>{t==="ALL"?"All Tiers":t}</button>
             ))}
           </div>
           <div style={{fontSize:10,color:"#a0a0a0",marginTop:5}}>{filtered.length} shown · {totalPlaced} placed</div>
@@ -1030,9 +1030,9 @@ function Calendar({ onSignOut }) {
             const p=PILLARS[c.pillar]||PILLARS.Brand;
             return (
               <div key={c.id} draggable onDragStart={e=>onDragStart(e,c,null)} onClick={()=>openPanel(c.id)} style={{background:placed?"#2e2e2e":"#242424",borderLeft:`3px solid ${placed?p.color+"cc":p.color}`,border:`1px solid ${placed?"#3a3a3a":"#333"}`,borderLeftWidth:3,borderRadius:4,padding:"6px 8px",marginBottom:4,cursor:"grab"}}>
-                <div style={{fontSize:12,fontWeight:placed?400:600,color:placed?"#c4c4c4":BRAND.bone,lineHeight:1.3}}>{c.title}</div>
+                <div style={{fontSize:12,fontWeight:placed?400:600,color:placed?"#c4c4c4":BRAND.bone,lineHeight:1.3,fontFamily:"'Georgia',serif"}}>{c.title}</div>
                 <div style={{display:"flex",gap:4,marginTop:3}}>
-                  <span style={{fontSize:9,color:placed?p.color+"cc":p.color,textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
+                  <span style={{fontSize:9,fontWeight:600,color:placed?(p.sidebarColor||p.color)+"d9":(p.sidebarColor||p.color),textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
                   <span style={{fontSize:9,color:"#a0a0a0"}}>·</span>
                   <span style={{fontSize:9,color:"#a0a0a0"}}>{c.tier}</span>
                   {placed&&<span style={{fontSize:9,color:"#b8b8b8",marginLeft:"auto"}}>placed</span>}
