@@ -358,6 +358,10 @@ const CONCEPTS = [
   {id:"ev-14-day",    title:"COH Canine Fitness Club — day-of",           pillar:"Events", tier:"T3", note:"Day-of for Creatures of Habit Canine Fitness Club."},
   {id:"ev-15-promo",  title:"COH Vaccine Pop Up — promo",                 pillar:"Events", tier:"T3", note:"3-day-out promo for Creatures of Habit Vaccine Pop Up."},
   {id:"ev-15-day",    title:"COH Vaccine Pop Up — day-of",                pillar:"Events", tier:"T3", note:"Day-of for Creatures of Habit Vaccine Pop Up."},
+  {id:"camp-pack",              title:"We Got Your Pack",                                   pillar:"Brand",   tier:"T1", note:"A promise of belonging. The pack is here, and we have you.", preferred_format:"Campaign"},
+  {id:"camp-worth-it",          title:"Worth It",                                           pillar:"Bond",    tier:"T1", note:"Every reason it's hard. Every reason it's worth it.",        preferred_format:"Campaign"},
+  {id:"camp-no-leashes",        title:"Where We're Going We Don't Need Leashes",            pillar:"Culture", tier:"T1", note:"A declaration. A destination. A different kind of freedom.", preferred_format:"Campaign"},
+  {id:"camp-tell-a-dog-person", title:"Tell a Dog Person",                                  pillar:"Brand",   tier:"T1", note:"Word of mouth, made physical. A card you hand to the right person.", preferred_format:"Campaign"},
 ];
 
 const PILLAR_PREFERRED_FORMAT = {
