@@ -1009,17 +1009,17 @@ function Calendar({ onSignOut }) {
       <div style={{width:248,flexShrink:0,background:BRAND.paw,color:BRAND.bone,display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"system-ui, -apple-system, 'Segoe UI', sans-serif"}}
         onDragOver={onDragOver} onDrop={onDropLib}>
         <div style={{padding:"14px 13px 10px",borderBottom:"1px solid #2a2a2a"}}>
-          <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:BRAND.sand,marginBottom:6}}>Concept Library</div>
+          <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:BRAND.sand,marginBottom:6}}>The Boneyard</div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search concepts…"
             style={{width:"100%",background:"#1e1e1e",border:"none",borderRadius:4,padding:"6px 8px",fontSize:12,color:BRAND.bone,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           <div style={{display:"flex",gap:3,marginTop:7,flexWrap:"wrap"}}>
             {["ALL","DOG","Culture","Bond","Edu","Brand","Timely","Paid","Events","Alerts","Partners"].map(p=>(
-              <button key={p} onClick={()=>setFilterPillar(p)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:filterPillar===p?"none":"1px solid #333",background:filterPillar===p?(PILLARS[p]?.color||BRAND.grass):"transparent",color:filterPillar===p?"#fff":BRAND.drySage,letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:"inherit"}}>{p}</button>
+              <button key={p} onClick={()=>setFilterPillar(p)} className={`lib-chip${filterPillar===p?" is-active":""}`} style={{letterSpacing:"0.04em",textTransform:"uppercase",background:filterPillar===p?(PILLARS[p]?.color||BRAND.grass):undefined}}>{p}</button>
             ))}
           </div>
           <div style={{display:"flex",gap:3,marginTop:5}}>
             {["ALL","T1","T2","T3"].map(t=>(
-              <button key={t} onClick={()=>setFilterTier(t)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:filterTier===t?"none":"1px solid #333",background:filterTier===t?BRAND.grass:"transparent",color:filterTier===t?"#fff":BRAND.drySage,fontFamily:"inherit"}}>{t==="ALL"?"All Tiers":t}</button>
+              <button key={t} onClick={()=>setFilterTier(t)} className={`lib-chip${filterTier===t?" is-active":""}`} style={{background:filterTier===t?BRAND.grass:undefined}}>{t==="ALL"?"All Tiers":t}</button>
             ))}
           </div>
           <div style={{fontSize:10,color:"#a0a0a0",marginTop:5}}>{filtered.length} shown · {totalPlaced} placed</div>

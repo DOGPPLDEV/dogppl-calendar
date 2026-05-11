@@ -10,6 +10,25 @@
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #BFB3A5; border-radius: 3px; }
+      .lib-chip {
+        background: transparent;
+        color: #E8E5DF;
+        border: 1px solid rgba(243, 241, 238, 0.28);
+        border-radius: 10px;
+        cursor: pointer;
+        font-family: inherit;
+        font-size: 10px;
+        padding: 2px 6px;
+        transition: color 120ms ease, border-color 120ms ease;
+      }
+      .lib-chip:hover {
+        color: #F3F1EE;
+        border-color: rgba(243, 241, 238, 0.5);
+      }
+      .lib-chip.is-active {
+        color: #fff;
+        border-color: transparent;
+      }
     </style>
   </head>
   <body>
