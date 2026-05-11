@@ -838,12 +838,14 @@ function Calendar({ onSignOut }) {
 
   const usedIds = new Set(Object.values(placements).flat());
   const effectiveConcepts = CONCEPTS.map(c => getConcept(c.id, conceptDetails)).filter(Boolean);
-  const filtered = effectiveConcepts.filter(c => {
-    if (filterPillar !== "ALL" && c.pillar !== filterPillar) return false;
-    if (filterTier !== "ALL" && c.tier !== filterTier) return false;
-    if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = effectiveConcepts
+    .filter(c => {
+      if (filterPillar !== "ALL" && c.pillar !== filterPillar) return false;
+      if (filterTier !== "ALL" && c.tier !== filterTier) return false;
+      if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => Number(usedIds.has(a.id)) - Number(usedIds.has(b.id)));
 
   // Cycle stats for visible month
   const monthDays = ALL_DAYS.filter(d => d.month === month);
