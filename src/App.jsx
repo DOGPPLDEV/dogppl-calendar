@@ -449,6 +449,46 @@ async function saveToSupabase(placements) {
     .upsert({ id: 1, placements, updated_at: new Date().toISOString() });
 }
 
+const DETAILS_STORAGE_KEY = "dogppl-concept-details-v1";
+
+async function loadConceptDetails() {
+  if (!supabase) {
+    try { const v = localStorage.getItem(DETAILS_STORAGE_KEY); return v ? JSON.parse(v) : {}; } catch(e){ return {}; }
+  }
+  const { data, error } = await supabase.from('concept_details').select('*');
+  if (error || !data) return {};
+  const map = {};
+  for (const row of data) map[row.id] = row;
+  return map;
+}
+
+async function saveConceptDetail(detail) {
+  if (!supabase) {
+    try {
+      const v = JSON.parse(localStorage.getItem(DETAILS_STORAGE_KEY) || '{}');
+      v[detail.id] = detail;
+      localStorage.setItem(DETAILS_STORAGE_KEY, JSON.stringify(v));
+    } catch(e) {}
+    return { error: null };
+  }
+  return await supabase
+    .from('concept_details')
+    .upsert({ ...detail, updated_at: new Date().toISOString() });
+}
+
+function getConcept(id, details) {
+  const base = CONCEPTS.find(c => c.id === id);
+  if (!base) return null;
+  const o = details && details[id];
+  if (!o) return base;
+  return {
+    ...base,
+    title: o.title || base.title,
+    pillar: o.pillar || base.pillar,
+    tier: o.tier || base.tier,
+  };
+}
+
 function mergeDefaults(stored) {
   // 1. Start with content defaults for weekdays
   const merged = {};
@@ -477,6 +517,153 @@ function mergeDefaults(stored) {
     }
   }
   return merged;
+}
+
+function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, uploading, onUpload, onRemoveMedia }) {
+  const fileRef = useRef(null);
+  if (!conceptId || !draft) return null;
+  const pillarKeys = ["DOG","Culture","Bond","Edu","Brand","Timely","Paid","Events","Alerts","Partners"];
+  const set = (k,v) => setDraft(d => d ? {...d, [k]: v} : d);
+
+  function onFilePick(e) {
+    const files = Array.from(e.target.files || []);
+    if (files.length) onUpload(files);
+    e.target.value = "";
+  }
+  function onDrop(e) {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length) onUpload(files);
+  }
+
+  const inputStyle = {width:"100%",background:"#FFF",border:`1px solid ${BRAND.sand}`,borderRadius:4,padding:"7px 9px",fontSize:13,fontFamily:"inherit",color:BRAND.paw,outline:"none",boxSizing:"border-box"};
+  const labelStyle = {fontSize:10,letterSpacing:"0.1em",textTransform:"uppercase",color:BRAND.drySage,marginBottom:4,display:"block"};
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(24,24,24,0.28)",zIndex:50,display:"flex",justifyContent:"flex-end"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:400,maxWidth:"100vw",height:"100%",background:BRAND.bone,color:BRAND.paw,fontFamily:"'Georgia',serif",display:"flex",flexDirection:"column",boxShadow:"-4px 0 16px rgba(0,0,0,0.18)"}}>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${BRAND.sand}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:BRAND.drySage}}>Concept</div>
+            <div style={{fontSize:14,fontWeight:700,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{draft.title || conceptId}</div>
+          </div>
+          <button onClick={onClose} aria-label="Close" style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:BRAND.drySage,padding:"0 4px",lineHeight:1}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px",display:"flex",flexDirection:"column",gap:12}}>
+          <div>
+            <label style={labelStyle}>Title</label>
+            <input value={draft.title||""} onChange={e=>set('title',e.target.value)} style={inputStyle}/>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <div style={{flex:1}}>
+              <label style={labelStyle}>Pillar</label>
+              <select value={draft.pillar||""} onChange={e=>set('pillar',e.target.value)} style={inputStyle}>
+                {pillarKeys.map(pk=><option key={pk} value={pk}>{PILLARS[pk].label}</option>)}
+              </select>
+            </div>
+            <div style={{width:92}}>
+              <label style={labelStyle}>Tier</label>
+              <select value={draft.tier||""} onChange={e=>set('tier',e.target.value)} style={inputStyle}>
+                {["T1","T2","T3"].map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Description</label>
+            <textarea rows={3} value={draft.description||""} onChange={e=>set('description',e.target.value)} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Caption</label>
+            <textarea rows={4} value={draft.caption||""} onChange={e=>set('caption',e.target.value)} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Format type</label>
+            <select value={draft.format_type||""} onChange={e=>set('format_type',e.target.value)} style={inputStyle}>
+              <option value="">— Select —</option>
+              <option value="Post">Post</option>
+              <option value="Story">Story</option>
+              <option value="Reel">Reel</option>
+            </select>
+          </div>
+
+          {draft.format_type === "Post" && (
+            <>
+              <div>
+                <label style={labelStyle}>Post media type</label>
+                <select value={draft.post_media_type||""} onChange={e=>set('post_media_type',e.target.value)} style={inputStyle}>
+                  <option value="">— Select —</option>
+                  <option value="Single still image">Single still image</option>
+                  <option value="Carousel of still images">Carousel of still images</option>
+                  <option value="Single video">Single video</option>
+                  <option value="Carousel of videos">Carousel of videos</option>
+                </select>
+              </div>
+              {(draft.post_media_type === "Carousel of still images" || draft.post_media_type === "Carousel of videos") && (
+                <div>
+                  <label style={labelStyle}>Carousel count</label>
+                  <input type="number" min={2} value={draft.post_carousel_count ?? ""} onChange={e=>set('post_carousel_count', e.target.value ? parseInt(e.target.value,10) : null)} style={inputStyle}/>
+                </div>
+              )}
+            </>
+          )}
+
+          {draft.format_type === "Story" && (
+            <>
+              <div>
+                <label style={labelStyle}>Story media type</label>
+                <select value={draft.story_media_type||""} onChange={e=>set('story_media_type',e.target.value)} style={inputStyle}>
+                  <option value="">— Select —</option>
+                  <option value="Still image">Still image</option>
+                  <option value="Video">Video</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>CTA copy (optional)</label>
+                <input value={draft.story_cta_copy||""} onChange={e=>set('story_cta_copy',e.target.value)} style={inputStyle}/>
+              </div>
+              <div>
+                <label style={labelStyle}>CTA link (optional)</label>
+                <input type="url" placeholder="https://" value={draft.story_cta_link||""} onChange={e=>set('story_cta_link',e.target.value)} style={inputStyle}/>
+              </div>
+            </>
+          )}
+
+          <div>
+            <label style={labelStyle}>Media</label>
+            <div onDragOver={e=>e.preventDefault()} onDrop={onDrop} onClick={()=>fileRef.current?.click()}
+              style={{border:`1px dashed ${BRAND.sand}`,borderRadius:4,padding:"16px 12px",textAlign:"center",cursor:"pointer",background:"#FFF",color:BRAND.drySage,fontSize:12}}>
+              {uploading ? "Uploading…" : "Drop images or videos here, or click to choose"}
+            </div>
+            <input ref={fileRef} type="file" multiple accept="image/*,video/*" onChange={onFilePick} style={{display:"none"}}/>
+            {draft.media && draft.media.length > 0 && (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginTop:8}}>
+                {draft.media.map((m,i)=>(
+                  <div key={(m && m.url) || i} style={{position:"relative",borderRadius:4,overflow:"hidden",background:"#EEE",aspectRatio:"1/1"}}>
+                    {m && m.type && m.type.startsWith("video") ? (
+                      <video src={m.url} muted style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    ) : (
+                      <img src={m && m.url} alt={(m && m.name)||""} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    )}
+                    <button onClick={()=>onRemoveMedia(m)} aria-label="Remove" style={{position:"absolute",top:3,right:3,background:"rgba(24,24,24,0.78)",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:11,cursor:"pointer",lineHeight:1,padding:0}}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${BRAND.sand}`,display:"flex",gap:8,flexShrink:0,background:BRAND.bone}}>
+          <button onClick={onSave} disabled={saving} style={{flex:1,background:BRAND.paw,color:BRAND.bone,border:"none",borderRadius:4,padding:"9px 14px",fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:saving?"default":"pointer",opacity:saving?0.6:1}}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button onClick={onClose} style={{background:"transparent",color:BRAND.drySage,border:`1px solid ${BRAND.sand}`,borderRadius:4,padding:"9px 14px",fontFamily:"inherit",fontSize:13,cursor:"pointer"}}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
@@ -509,14 +696,21 @@ function Calendar({ onSignOut }) {
   const [month, setMonth] = useState(4);
   const [hoverDay, setHoverDay] = useState(null);
 
+  const [conceptDetails, setConceptDetails] = useState({});
+  const [selectedConceptId, setSelectedConceptId] = useState(null);
+  const [panelDraft, setPanelDraft] = useState(null);
+  const [savingPanel, setSavingPanel] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
   const saveTimer = useRef(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
 
   // Load initial state
   useEffect(() => {
-    loadFromSupabase().then(stored => {
+    Promise.all([loadFromSupabase(), loadConceptDetails()]).then(([stored, details]) => {
       setPlacements(mergeDefaults(stored));
+      setConceptDetails(details || {});
       setLoaded(true);
     });
   }, []);
@@ -553,8 +747,29 @@ function Calendar({ onSignOut }) {
     return () => supabase.removeChannel(channel);
   }, [loaded]);
 
+  // Real-time sync for concept_details
+  useEffect(() => {
+    if (!supabase || !loaded) return;
+    const channel = supabase
+      .channel('concept-details-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'concept_details' }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          setConceptDetails(prev => {
+            const next = {...prev};
+            if (payload.old && payload.old.id) delete next[payload.old.id];
+            return next;
+          });
+        } else if (payload.new) {
+          setConceptDetails(prev => ({...prev, [payload.new.id]: payload.new}));
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [loaded]);
+
   const usedIds = new Set(Object.values(placements).flat());
-  const filtered = CONCEPTS.filter(c => {
+  const effectiveConcepts = CONCEPTS.map(c => getConcept(c.id, conceptDetails)).filter(Boolean);
+  const filtered = effectiveConcepts.filter(c => {
     if (filterPillar !== "ALL" && c.pillar !== filterPillar) return false;
     if (filterTier !== "ALL" && c.tier !== filterTier) return false;
     if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false;
@@ -567,7 +782,7 @@ function Calendar({ onSignOut }) {
   let runCore = 0;
   for (const d of monthDays) {
     for (const cid of (placements[d.id]||[])) {
-      const c = CONCEPTS.find(x=>x.id===cid);
+      const c = getConcept(cid, conceptDetails);
       if (c && CORE_PILLARS.includes(c.pillar)) {
         const cyc = Math.floor(runCore/10)+1;
         if (!monthCycleStats[cyc]) monthCycleStats[cyc] = {DOG:0,Culture:0,Bond:0,Edu:0,Brand:0,total:0};
@@ -603,13 +818,95 @@ function Calendar({ onSignOut }) {
     setPlacements(prev=>{const next={...prev};next[dayId]=(next[dayId]||[]).filter(id=>id!==cid);if(!next[dayId].length)delete next[dayId];return next;});
   }
 
+  function openPanel(id) {
+    const base = CONCEPTS.find(c => c.id === id);
+    if (!base) return;
+    const stored = conceptDetails[id] || {};
+    setPanelDraft({
+      id,
+      title: stored.title ?? base.title,
+      pillar: stored.pillar ?? base.pillar,
+      tier: stored.tier ?? base.tier,
+      description: stored.description ?? base.note ?? "",
+      caption: stored.caption ?? "",
+      format_type: stored.format_type ?? "",
+      post_media_type: stored.post_media_type ?? "",
+      post_carousel_count: stored.post_carousel_count ?? null,
+      story_media_type: stored.story_media_type ?? "",
+      story_cta_copy: stored.story_cta_copy ?? "",
+      story_cta_link: stored.story_cta_link ?? "",
+      media: Array.isArray(stored.media) ? stored.media : [],
+    });
+    setSelectedConceptId(id);
+  }
+
+  function closePanel() {
+    setSelectedConceptId(null);
+    setPanelDraft(null);
+  }
+
+  async function savePanel() {
+    if (!panelDraft) return;
+    setSavingPanel(true);
+    const detail = {
+      id: panelDraft.id,
+      title: panelDraft.title || null,
+      pillar: panelDraft.pillar || null,
+      tier: panelDraft.tier || null,
+      description: panelDraft.description || null,
+      caption: panelDraft.caption || null,
+      format_type: panelDraft.format_type || null,
+      post_media_type: panelDraft.post_media_type || null,
+      post_carousel_count: panelDraft.post_carousel_count || null,
+      story_media_type: panelDraft.story_media_type || null,
+      story_cta_copy: panelDraft.story_cta_copy || null,
+      story_cta_link: panelDraft.story_cta_link || null,
+      media: panelDraft.media || [],
+    };
+    const res = await saveConceptDetail(detail);
+    if (!res || !res.error) {
+      setConceptDetails(prev => ({...prev, [detail.id]: detail}));
+    }
+    setSavingPanel(false);
+  }
+
+  async function handleUploadMedia(files) {
+    if (!selectedConceptId) return;
+    setUploadingMedia(true);
+    try {
+      const uploaded = [];
+      for (const file of files) {
+        if (!supabase) {
+          uploaded.push({ name: file.name, type: file.type, url: URL.createObjectURL(file), path: null });
+          continue;
+        }
+        const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${selectedConceptId}/${Date.now()}-${safe}`;
+        const { error } = await supabase.storage.from('concept-media').upload(path, file, { upsert: false });
+        if (error) { console.error(error); continue; }
+        const { data: pub } = supabase.storage.from('concept-media').getPublicUrl(path);
+        uploaded.push({ name: file.name, type: file.type, url: pub.publicUrl, path });
+      }
+      setPanelDraft(d => d ? {...d, media: [...(d.media||[]), ...uploaded]} : d);
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
+
+  async function handleRemoveMedia(item) {
+    if (supabase && item && item.path) {
+      try { await supabase.storage.from('concept-media').remove([item.path]); } catch(e) { console.error(e); }
+    }
+    setPanelDraft(d => d ? {...d, media: (d.media||[]).filter(m => m !== item)} : d);
+  }
+
   const totalPlaced = Object.values(placements).flat().length;
   const weeks = getWeeksInMonth(month);
 
   // Pillar + tier coverage counters (unique concept IDs only)
   const pillarStats = {};
   const tierStats = {};
-  for (const c of CONCEPTS) {
+  for (const c of effectiveConcepts) {
     if (!pillarStats[c.pillar]) pillarStats[c.pillar] = { total: 0, placed: 0 };
     pillarStats[c.pillar].total++;
     if (usedIds.has(c.id)) pillarStats[c.pillar].placed++;
@@ -644,7 +941,7 @@ function Calendar({ onSignOut }) {
             const placed=usedIds.has(c.id);
             const p=PILLARS[c.pillar]||PILLARS.Brand;
             return (
-              <div key={c.id} draggable onDragStart={e=>onDragStart(e,c,null)} style={{background:placed?"#2e2e2e":"#242424",borderLeft:`3px solid ${placed?p.color+"cc":p.color}`,border:`1px solid ${placed?"#3a3a3a":"#333"}`,borderLeftWidth:3,borderRadius:4,padding:"6px 8px",marginBottom:4,cursor:"grab"}}>
+              <div key={c.id} draggable onDragStart={e=>onDragStart(e,c,null)} onClick={()=>openPanel(c.id)} style={{background:placed?"#2e2e2e":"#242424",borderLeft:`3px solid ${placed?p.color+"cc":p.color}`,border:`1px solid ${placed?"#3a3a3a":"#333"}`,borderLeftWidth:3,borderRadius:4,padding:"6px 8px",marginBottom:4,cursor:"grab"}}>
                 <div style={{fontSize:12,fontWeight:placed?400:600,color:placed?"#c4c4c4":BRAND.bone,lineHeight:1.3}}>{c.title}</div>
                 <div style={{display:"flex",gap:4,marginTop:3}}>
                   <span style={{fontSize:9,color:placed?p.color+"cc":p.color,textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
@@ -753,8 +1050,11 @@ function Calendar({ onSignOut }) {
             <div key={wi} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:4}}>
               {week.map((day,di)=>{
                 if(!day) return <div key={di} style={{minHeight:76,background:"#F3F2EF",borderRadius:4,opacity:0.3}}/>;
+                const today = new Date(); today.setHours(0,0,0,0);
+                const isPast = day.date < today;
+                const fadedOpacity = isPast ? 0.45 : 1;
                 const isWeekend = day.date.getDay()===0||day.date.getDay()===6;
-                const dayPosts = (placements[day.id]||[]).map(id=>CONCEPTS.find(c=>c.id===id)).filter(Boolean);
+                const dayPosts = (placements[day.id]||[]).map(id=>getConcept(id,conceptDetails)).filter(Boolean);
                 const corePosts = dayPosts.filter(c=>CORE_PILLARS.includes(c.pillar));
                 const timelyPosts = dayPosts.filter(c=>c.pillar==="Timely");
                 const isDrop = hoverDay===day.id;
@@ -762,24 +1062,24 @@ function Calendar({ onSignOut }) {
                   <div key={day.id} onDragOver={e=>{onDragOver(e);setHoverDay(day.id);}} onDragLeave={()=>setHoverDay(null)} onDrop={e=>{onDropDay(e,day.id);setHoverDay(null);}}
                     style={{minHeight:110,background:isDrop?"#EFF6EC":isWeekend?"#F5F4F0":"#FFF",border:`1px solid ${isDrop?"#639922":BRAND.sand}`,borderRadius:4,padding:"5px 6px",transition:"all 0.08s"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                      <span style={{fontSize:11,fontWeight:600,color:isWeekend?BRAND.sand:BRAND.paw}}>{day.date.getDate()}</span>
-                      {corePosts.length>0&&<span style={{fontSize:9,color:BRAND.grass,fontWeight:600}}>{corePosts.length}p</span>}
+                      <span style={{fontSize:11,fontWeight:600,color:isWeekend?BRAND.sand:BRAND.paw,opacity:fadedOpacity}}>{day.date.getDate()}</span>
+                      {corePosts.length>0&&<span style={{fontSize:9,color:BRAND.grass,fontWeight:600,opacity:fadedOpacity}}>{corePosts.length}p</span>}
                     </div>
                     {timelyPosts.map(concept=>{
                       const p=PILLARS.Timely;
-                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3}}>
+                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:fadedOpacity}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
-                        <button onClick={()=>remove(concept.id,day.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
+                        <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
                     })}
                     {dayPosts.filter(c=>c.pillar!=="Timely").map(concept=>{
                       const p=PILLARS[concept.pillar]||PILLARS.Brand;
-                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3}}>
+                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:fadedOpacity}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
-                        <button onClick={()=>remove(concept.id,day.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
+                        <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
                     })}
-                    {dayPosts.length===0&&<div style={{fontSize:9,color:"#DDD",textAlign:"center",paddingTop:10}}>+</div>}
+                    {dayPosts.length===0&&<div style={{fontSize:9,color:"#DDD",textAlign:"center",paddingTop:10,opacity:fadedOpacity}}>+</div>}
                   </div>
                 );
               })}
@@ -787,6 +1087,18 @@ function Calendar({ onSignOut }) {
           ))}
         </div>
       </div>
+
+      <ConceptPanel
+        conceptId={selectedConceptId}
+        draft={panelDraft}
+        setDraft={setPanelDraft}
+        onClose={closePanel}
+        onSave={savePanel}
+        saving={savingPanel}
+        uploading={uploadingMedia}
+        onUpload={handleUploadMedia}
+        onRemoveMedia={handleRemoveMedia}
+      />
     </div>
   );
 }
