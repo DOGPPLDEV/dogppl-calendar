@@ -1020,7 +1020,7 @@ function Calendar({ onSignOut }) {
               <button key={t} onClick={()=>setFilterTier(t)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:filterTier===t?"none":"1px solid #333",background:filterTier===t?BRAND.grass:"transparent",color:filterTier===t?"#fff":BRAND.drySage}}>{t==="ALL"?"All Tiers":t}</button>
             ))}
           </div>
-          <div style={{fontSize:10,color:"#555",marginTop:5}}>{filtered.length} shown · {totalPlaced} placed</div>
+          <div style={{fontSize:10,color:"#a0a0a0",marginTop:5}}>{filtered.length} shown · {totalPlaced} placed</div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"6px 10px"}}>
           {filtered.map(c=>{
@@ -1031,9 +1031,9 @@ function Calendar({ onSignOut }) {
                 <div style={{fontSize:12,fontWeight:placed?400:600,color:placed?"#c4c4c4":BRAND.bone,lineHeight:1.3}}>{c.title}</div>
                 <div style={{display:"flex",gap:4,marginTop:3}}>
                   <span style={{fontSize:9,color:placed?p.color+"cc":p.color,textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
-                  <span style={{fontSize:9,color:"#777"}}>·</span>
-                  <span style={{fontSize:9,color:"#777"}}>{c.tier}</span>
-                  {placed&&<span style={{fontSize:9,color:"#999",marginLeft:"auto"}}>placed</span>}
+                  <span style={{fontSize:9,color:"#a0a0a0"}}>·</span>
+                  <span style={{fontSize:9,color:"#a0a0a0"}}>{c.tier}</span>
+                  {placed&&<span style={{fontSize:9,color:"#b8b8b8",marginLeft:"auto"}}>placed</span>}
                 </div>
               </div>
             );
@@ -1041,7 +1041,7 @@ function Calendar({ onSignOut }) {
         </div>
         {/* STATS PANEL */}
         <div style={{borderTop:"1px solid #252525",padding:"10px 12px",flexShrink:0}}>
-          <div style={{fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:"#555",marginBottom:7}}>Coverage</div>
+          <div style={{fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:"#a0a0a0",marginBottom:7}}>Coverage</div>
           {/* By Pillar */}
           {["DOG","Culture","Bond","Edu","Brand","Timely","Paid","Events","Alerts","Partners"].map(pk => {
             const p = PILLARS[pk] || PILLARS.Brand;
@@ -1052,9 +1052,9 @@ function Calendar({ onSignOut }) {
               <div key={pk} style={{marginBottom:5}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
                   <span style={{fontSize:9,color:p.color,textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>{pk}</span>
-                  <span style={{fontSize:9,color: pct===100?"#4a8a2a":"#666"}}>
+                  <span style={{fontSize:9,color: pct===100?"#4a8a2a":"#c0c0c0"}}>
                     {s.placed}/{s.total}
-                    {remaining>0 && <span style={{color:"#555"}}> · {remaining} left</span>}
+                    {remaining>0 && <span style={{color:"#a0a0a0"}}> · {remaining} left</span>}
                     {pct===100 && <span style={{color:"#4a8a2a"}}> ✓</span>}
                   </span>
                 </div>
@@ -1065,7 +1065,7 @@ function Calendar({ onSignOut }) {
             );
           })}
           {/* By Tier */}
-          <div style={{marginTop:8,marginBottom:5,fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#555"}}>By Tier</div>
+          <div style={{marginTop:8,marginBottom:5,fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",color:"#a0a0a0"}}>By Tier</div>
           <div style={{display:"flex",gap:6}}>
             {["T1","T2","T3"].map(t => {
               const s = tierStats[t] || {total:0,placed:0};
@@ -1073,11 +1073,11 @@ function Calendar({ onSignOut }) {
               return (
                 <div key={t} style={{flex:1,background:"#1a1a1a",borderRadius:4,padding:"6px 7px",textAlign:"center"}}>
                   <div style={{fontSize:11,fontWeight:700,color:pct===100?"#4a8a2a":BRAND.bone}}>{s.placed}</div>
-                  <div style={{fontSize:8,color:"#555",marginTop:1}}>of {s.total}</div>
+                  <div style={{fontSize:8,color:"#a0a0a0",marginTop:1}}>of {s.total}</div>
                   <div style={{height:2,background:"#222",borderRadius:1,overflow:"hidden",marginTop:4}}>
                     <div style={{height:"100%",width:`${pct}%`,background:pct===100?"#4a8a2a":BRAND.grass,transition:"width 0.3s"}}/>
                   </div>
-                  <div style={{fontSize:9,color:"#666",marginTop:3,fontWeight:600}}>{t}</div>
+                  <div style={{fontSize:9,color:"#c0c0c0",marginTop:3,fontWeight:600}}>{t}</div>
                 </div>
               );
             })}
@@ -1085,7 +1085,7 @@ function Calendar({ onSignOut }) {
 
           {/* Format mix */}
           <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:"#555"}}>Format mix</span>
+            <span style={{fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:"#a0a0a0"}}>Format mix</span>
             <div style={{display:"flex",gap:3}}>
               {[["30d","30-day"],["month","This month"]].map(([key,label])=>(
                 <button key={key} onClick={()=>setFormatWindow(key)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:formatWindow===key?"none":"1px solid #333",background:formatWindow===key?BRAND.grass:"transparent",color:formatWindow===key?"#fff":BRAND.drySage,fontFamily:"inherit"}}>{label}</button>
@@ -1105,10 +1105,10 @@ function Calendar({ onSignOut }) {
             return (
               <div key={row.key} style={{marginBottom:5}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                  <span style={{fontSize:9,color:"#aaa",textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>{row.label}</span>
-                  <span style={{fontSize:9,color:"#666"}}>
+                  <span style={{fontSize:9,color:"#d0d0d0",textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>{row.label}</span>
+                  <span style={{fontSize:9,color:"#c0c0c0"}}>
                     {count}{mixTotal?` · ${pct}%`:""}
-                    {row.target!=null && <span style={{color:"#555"}}> / target {row.target}%</span>}
+                    {row.target!=null && <span style={{color:"#a0a0a0"}}> / target {row.target}%</span>}
                   </span>
                 </div>
                 <div style={{height:3,background:"#222",borderRadius:2,overflow:"hidden",position:"relative"}}>
@@ -1118,15 +1118,15 @@ function Calendar({ onSignOut }) {
                   )}
                 </div>
                 {below && (
-                  <div style={{fontSize:9,color:"#7a7a7a",marginTop:2,fontStyle:"italic"}}>{row.target - pct}% headroom to target</div>
+                  <div style={{fontSize:9,color:"#aaaaaa",marginTop:2,fontStyle:"italic"}}>{row.target - pct}% headroom to target</div>
                 )}
               </div>
             );
           })}
-          <div style={{fontSize:9,color:"#888",marginTop:6}}>
+          <div style={{fontSize:9,color:"#c0c0c0",marginTop:6}}>
             {storyCount} {storyCount===1?"story":"stories"} scheduled this window
           </div>
-          <div style={{fontSize:9,color:"#444",marginTop:8,lineHeight:1.5}}>Drag to calendar · Drag back to remove</div>
+          <div style={{fontSize:9,color:"#9a9a9a",marginTop:8,lineHeight:1.5}}>Drag to calendar · Drag back to remove</div>
         </div>
       </div>
 
