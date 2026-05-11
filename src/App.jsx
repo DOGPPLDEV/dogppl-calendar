@@ -26,13 +26,6 @@ const CYCLE_TARGET = {DOG:3, Culture:2, Bond:2, Edu:2, Brand:1};
 // Recurring formats: Meet [dog] Reel (every ~2 wks), Dog breed origin stories,
 //   Rufferee Canine Edu tip (every other Edu slot), Sofia & Margot (different member each time)
 const CONTENT_DEFAULTS = {
-  "day-2026-4-1": ["dog-t3-1"],
-  "day-2026-4-4": ["cul-t3-1"],
-  "day-2026-4-5": ["bond-t3-1"],
-  "day-2026-4-6": ["edu-t3-1"],
-  "day-2026-4-7": ["dog-t3-3"],
-  "day-2026-4-8": ["cul-t3-2"],
-  "day-2026-4-11": ["dog-t3-2"],
   "day-2026-4-12": ["edu-t3-3"],
   "day-2026-4-13": ["bond-t3-3"],
   "day-2026-4-14": ["brand-t3-1"],
@@ -204,8 +197,6 @@ const CONTENT_DEFAULTS = {
 };
 
 const TIMELY_DEFAULTS = {
-  "day-2026-4-4":  ["timely-mg"],
-  "day-2026-4-10": ["timely-md"],
   "day-2026-5-11": ["timely-wc"],
   "day-2026-5-18": ["timely-wkly"],
   "day-2026-5-25": ["timely-wkly"],
@@ -369,6 +360,19 @@ const CONCEPTS = [
   {id:"ev-15-day",    title:"COH Vaccine Pop Up — day-of",                pillar:"Events", tier:"T3", note:"Day-of for Creatures of Habit Vaccine Pop Up."},
 ];
 
+const PILLAR_PREFERRED_FORMAT = {
+  DOG: "Reel",
+  Bond: "Reel",
+  Culture: "Carousel",
+  Edu: "Carousel",
+  Brand: "Carousel",
+};
+for (const c of CONCEPTS) {
+  if (c.preferred_format === undefined) {
+    c.preferred_format = PILLAR_PREFERRED_FORMAT[c.pillar] ?? null;
+  }
+}
+
 const EVENTS_DEFAULTS = {
   "day-2026-4-7":  ["ev-01-promo"],
   "day-2026-4-10": ["ev-01-day","ev-02-promo"],
@@ -486,8 +490,47 @@ function getConcept(id, details) {
     title: o.title || base.title,
     pillar: o.pillar || base.pillar,
     tier: o.tier || base.tier,
+    preferred_format: o.preferred_format ?? base.preferred_format,
   };
 }
+
+function getEffectiveFormat(id, details) {
+  const c = getConcept(id, details);
+  if (!c) return "Unset";
+  const d = details && details[id];
+  if (d) {
+    if (d.format_type === "Reel") return "Reel";
+    if (d.format_type === "Story") return "Story";
+    if (d.format_type === "Post") {
+      const t = d.post_media_type;
+      if (t === "Single still image") return "Single image";
+      if (t === "Single video") return "Video";
+      if (t === "Carousel of still images" || t === "Carousel of videos") return "Carousel";
+    }
+  }
+  return c.preferred_format || "Unset";
+}
+
+function dayIdToDate(dayId) {
+  const m = /^day-(\d+)-(\d+)-(\d+)$/.exec(dayId);
+  if (!m) return null;
+  return new Date(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10));
+}
+
+function isDayInWindow(dayId, windowKey, today) {
+  const date = dayIdToDate(dayId);
+  if (!date) return false;
+  if (windowKey === "month") {
+    return date.getFullYear() === today.getFullYear() && date.getMonth() === today.getMonth();
+  }
+  const start = new Date(today); start.setDate(today.getDate() - 30);
+  return date >= start && date <= today;
+}
+
+const PAST_DAYS_TO_CLEAR = [
+  "day-2026-4-1","day-2026-4-2","day-2026-4-3","day-2026-4-4","day-2026-4-5",
+  "day-2026-4-6","day-2026-4-7","day-2026-4-8","day-2026-4-9","day-2026-4-10","day-2026-4-11",
+];
 
 function mergeDefaults(stored) {
   // 1. Start with content defaults for weekdays
@@ -515,6 +558,15 @@ function mergeDefaults(stored) {
     for (const cid of concepts) {
       if (!merged[dayId].includes(cid)) merged[dayId] = [...merged[dayId], cid];
     }
+  }
+  // 5. Strip non-Events placements from stale past days (May 1–11, 2026)
+  for (const dayId of PAST_DAYS_TO_CLEAR) {
+    if (!merged[dayId]) continue;
+    merged[dayId] = merged[dayId].filter(cid => {
+      const c = CONCEPTS.find(x => x.id === cid);
+      return c && c.pillar === "Events";
+    });
+    if (!merged[dayId].length) delete merged[dayId];
   }
   return merged;
 }
@@ -568,6 +620,17 @@ function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, upl
                 {["T1","T2","T3"].map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </div>
+          </div>
+          <div>
+            <label style={labelStyle}>Preferred format (default when placed)</label>
+            <select value={draft.preferred_format||""} onChange={e=>set('preferred_format',e.target.value)} style={inputStyle}>
+              <option value="">— None —</option>
+              <option value="Reel">Reel</option>
+              <option value="Carousel">Carousel</option>
+              <option value="Single image">Single image</option>
+              <option value="Video">Video</option>
+              <option value="Story">Story</option>
+            </select>
           </div>
           <div>
             <label style={labelStyle}>Description</label>
@@ -701,6 +764,12 @@ function Calendar({ onSignOut }) {
   const [panelDraft, setPanelDraft] = useState(null);
   const [savingPanel, setSavingPanel] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [formatWindow, setFormatWindow] = useState(() => {
+    try { return localStorage.getItem("dogppl-format-window") || "30d"; } catch(e) { return "30d"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("dogppl-format-window", formatWindow); } catch(e) {}
+  }, [formatWindow]);
 
   const saveTimer = useRef(null);
   const [syncing, setSyncing] = useState(false);
@@ -827,6 +896,7 @@ function Calendar({ onSignOut }) {
       title: stored.title ?? base.title,
       pillar: stored.pillar ?? base.pillar,
       tier: stored.tier ?? base.tier,
+      preferred_format: stored.preferred_format ?? base.preferred_format ?? "",
       description: stored.description ?? base.note ?? "",
       caption: stored.caption ?? "",
       format_type: stored.format_type ?? "",
@@ -853,6 +923,7 @@ function Calendar({ onSignOut }) {
       title: panelDraft.title || null,
       pillar: panelDraft.pillar || null,
       tier: panelDraft.tier || null,
+      preferred_format: panelDraft.preferred_format || null,
       description: panelDraft.description || null,
       caption: panelDraft.caption || null,
       format_type: panelDraft.format_type || null,
@@ -902,6 +973,21 @@ function Calendar({ onSignOut }) {
 
   const totalPlaced = Object.values(placements).flat().length;
   const weeks = getWeeksInMonth(month);
+
+  // Format mix over selected window — skip Events (soft holds)
+  const today = new Date(); today.setHours(0,0,0,0);
+  const formatCounts = { Reel:0, Carousel:0, "Single image":0, Video:0, Story:0, Unset:0 };
+  for (const [dayId, conceptIds] of Object.entries(placements)) {
+    if (!isDayInWindow(dayId, formatWindow, today)) continue;
+    for (const cid of conceptIds) {
+      const c = getConcept(cid, conceptDetails);
+      if (!c || c.pillar === "Events") continue;
+      const fmt = getEffectiveFormat(cid, conceptDetails);
+      formatCounts[fmt] = (formatCounts[fmt] || 0) + 1;
+    }
+  }
+  const mixTotal = formatCounts.Reel + formatCounts.Carousel + formatCounts["Single image"] + formatCounts.Video + formatCounts.Unset;
+  const storyCount = formatCounts.Story;
 
   // Pillar + tier coverage counters (unique concept IDs only)
   const pillarStats = {};
@@ -995,6 +1081,50 @@ function Calendar({ onSignOut }) {
                 </div>
               );
             })}
+          </div>
+
+          {/* Format mix */}
+          <div style={{marginTop:12,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <span style={{fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:"#555"}}>Format mix</span>
+            <div style={{display:"flex",gap:3}}>
+              {[["30d","30-day"],["month","This month"]].map(([key,label])=>(
+                <button key={key} onClick={()=>setFormatWindow(key)} style={{fontSize:9,padding:"2px 6px",borderRadius:10,cursor:"pointer",border:formatWindow===key?"none":"1px solid #333",background:formatWindow===key?BRAND.grass:"transparent",color:formatWindow===key?"#fff":BRAND.drySage,fontFamily:"inherit"}}>{label}</button>
+              ))}
+            </div>
+          </div>
+          {[
+            {key:"Reel",          label:"Reels",        target:50, color:PILLARS.DOG.color},
+            {key:"Carousel",      label:"Carousels",    target:30, color:PILLARS.Culture.color},
+            {key:"Single image",  label:"Single image", target:15, color:BRAND.mud},
+            {key:"Video",         label:"Video",        target:null, color:BRAND.darkGrass},
+            {key:"Unset",         label:"Unset",        target:null, color:"#555"},
+          ].map(row => {
+            const count = formatCounts[row.key] || 0;
+            const pct = mixTotal ? Math.round((count/mixTotal)*100) : 0;
+            const below = row.target != null && pct < row.target;
+            return (
+              <div key={row.key} style={{marginBottom:5}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                  <span style={{fontSize:9,color:"#aaa",textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>{row.label}</span>
+                  <span style={{fontSize:9,color:"#666"}}>
+                    {count}{mixTotal?` · ${pct}%`:""}
+                    {row.target!=null && <span style={{color:"#555"}}> / target {row.target}%</span>}
+                  </span>
+                </div>
+                <div style={{height:3,background:"#222",borderRadius:2,overflow:"hidden",position:"relative"}}>
+                  <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:row.color,transition:"width 0.3s"}}/>
+                  {row.target!=null && (
+                    <div style={{position:"absolute",left:`${row.target}%`,top:-1,bottom:-1,width:1,background:"#777",opacity:0.55}}/>
+                  )}
+                </div>
+                {below && (
+                  <div style={{fontSize:9,color:"#7a7a7a",marginTop:2,fontStyle:"italic"}}>{row.target - pct}% headroom to target</div>
+                )}
+              </div>
+            );
+          })}
+          <div style={{fontSize:9,color:"#888",marginTop:6}}>
+            {storyCount} {storyCount===1?"story":"stories"} scheduled this window
           </div>
           <div style={{fontSize:9,color:"#444",marginTop:8,lineHeight:1.5}}>Drag to calendar · Drag back to remove</div>
         </div>
