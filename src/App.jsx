@@ -488,14 +488,48 @@ function getConcept(id, details) {
   const base = CONCEPTS.find(c => c.id === id);
   if (!base) return null;
   const o = details && details[id];
-  if (!o) return base;
+  if (!o) return { ...base, status: 'approved' };
   return {
     ...base,
     title: o.title || base.title,
     pillar: o.pillar || base.pillar,
     tier: o.tier || base.tier,
     preferred_format: o.preferred_format ?? base.preferred_format,
+    status: o.status || 'approved',
   };
+}
+
+const SCHEDULABLE_STATUSES = new Set(['approved', 'production']);
+
+// Best-effort: once we have placements + concept details, write any
+// past-dated placement into concept_deployments so the Boneyard's
+// deployment history populates without manual entry. Idempotency relies
+// on a unique constraint (concept_id, deployed_at, channel).
+async function syncDeploymentsFromPlacements(placements, conceptDetails) {
+  if (!supabase) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rows = [];
+  for (const [dayId, conceptIds] of Object.entries(placements || {})) {
+    const m = /^day-(\d+)-(\d+)-(\d+)$/.exec(dayId);
+    if (!m) continue;
+    const date = new Date(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10));
+    if (date > today) continue;
+    for (const cid of conceptIds) {
+      const c = getConcept(cid, conceptDetails);
+      if (!c) continue;
+      if (c.pillar === 'Events') continue; // soft holds, not real publishings
+      rows.push({
+        concept_id: cid,
+        deployed_at: date.toISOString().slice(0, 10),
+        channel: c.preferred_format || 'Calendar',
+        notes: null,
+      });
+    }
+  }
+  if (!rows.length) return;
+  await supabase
+    .from('concept_deployments')
+    .upsert(rows, { onConflict: 'concept_id,deployed_at,channel', ignoreDuplicates: true });
 }
 
 function getEffectiveFormat(id, details) {
@@ -720,7 +754,13 @@ function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, upl
           </div>
         </div>
 
-        <div style={{padding:"12px 18px",borderTop:`1px solid ${BRAND.sand}`,display:"flex",gap:8,flexShrink:0,background:BRAND.bone}}>
+        <div style={{padding:"10px 18px 4px",fontSize:11,textAlign:"center"}}>
+          <a href={`https://boneyard.dogppl.co/c/${encodeURIComponent(conceptId)}`} target="_blank" rel="noopener"
+             style={{fontFamily:"ui-monospace, 'JetBrains Mono', monospace",fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:BRAND.mud,textDecoration:"none"}}>
+            Open in Boneyard →
+          </a>
+        </div>
+        <div style={{padding:"8px 18px 12px",borderTop:`1px solid ${BRAND.sand}`,display:"flex",gap:8,flexShrink:0,background:BRAND.bone}}>
           <button onClick={onSave} disabled={saving} style={{flex:1,background:BRAND.paw,color:BRAND.bone,border:"none",borderRadius:4,padding:"9px 14px",fontFamily:"inherit",fontSize:13,fontWeight:600,cursor:saving?"default":"pointer",opacity:saving?0.6:1}}>
             {saving ? "Saving…" : "Save"}
           </button>
@@ -782,9 +822,14 @@ function Calendar({ onSignOut }) {
   // Load initial state
   useEffect(() => {
     Promise.all([loadFromSupabase(), loadConceptDetails()]).then(([stored, details]) => {
-      setPlacements(mergeDefaults(stored));
+      const merged = mergeDefaults(stored);
+      setPlacements(merged);
       setConceptDetails(details || {});
       setLoaded(true);
+      // Best-effort deployment auto-sync — don't block UI or surface errors.
+      syncDeploymentsFromPlacements(merged, details || {}).catch(err => {
+        console.warn('Deployment auto-sync skipped:', err?.message || err);
+      });
     });
   }, []);
 
@@ -841,7 +886,12 @@ function Calendar({ onSignOut }) {
   }, [loaded]);
 
   const usedIds = new Set(Object.values(placements).flat());
-  const effectiveConcepts = CONCEPTS.map(c => getConcept(c.id, conceptDetails)).filter(Boolean);
+  // Only "schedulable" concepts (approved + production) populate the
+  // calendar's sidebar and coverage charts. Sketches, deployed, and
+  // buried concepts live in the Boneyard but disappear here.
+  const effectiveConcepts = CONCEPTS
+    .map(c => getConcept(c.id, conceptDetails))
+    .filter(c => c && SCHEDULABLE_STATUSES.has(c.status));
   const filtered = effectiveConcepts
     .filter(c => {
       if (filterPillar !== "ALL" && c.pillar !== filterPillar) return false;
@@ -892,6 +942,18 @@ function Calendar({ onSignOut }) {
   function remove(cid, dayId) {
     setPlacements(prev=>{const next={...prev};next[dayId]=(next[dayId]||[]).filter(id=>id!==cid);if(!next[dayId].length)delete next[dayId];return next;});
   }
+
+  // Read ?concept=<id> on load and open that concept's panel.
+  useEffect(() => {
+    if (!loaded) return;
+    const url = new URL(window.location.href);
+    const wanted = url.searchParams.get('concept');
+    if (!wanted) return;
+    if (CONCEPTS.find(c => c.id === wanted)) openPanel(wanted);
+    url.searchParams.delete('concept');
+    window.history.replaceState({}, '', url.pathname + (url.search || ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   function openPanel(id) {
     const base = CONCEPTS.find(c => c.id === id);
@@ -1013,7 +1075,10 @@ function Calendar({ onSignOut }) {
       <div style={{width:248,flexShrink:0,background:BRAND.paw,color:BRAND.bone,display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"system-ui, -apple-system, 'Segoe UI', sans-serif"}}
         onDragOver={onDragOver} onDrop={onDropLib}>
         <div style={{padding:"14px 13px 10px",borderBottom:"1px solid #2a2a2a"}}>
-          <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:BRAND.sand,marginBottom:6}}>The Boneyard</div>
+          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:6}}>
+            <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:BRAND.sand}}>The Boneyard</div>
+            <a href="https://boneyard.dogppl.co" target="_blank" rel="noopener" style={{fontFamily:"ui-monospace, 'JetBrains Mono', monospace",fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:BRAND.mud,textDecoration:"none"}}>Open full vault →</a>
+          </div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search concepts…"
             style={{width:"100%",background:"#1e1e1e",border:"none",borderRadius:4,padding:"6px 8px",fontSize:12,color:BRAND.bone,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           <div style={{display:"flex",gap:3,marginTop:7,flexWrap:"wrap"}}>
