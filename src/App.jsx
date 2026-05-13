@@ -1168,7 +1168,6 @@ function Calendar({ onSignOut }) {
             {key:"Carousel",      label:"Carousels",    target:30, color:PILLARS.Culture.color},
             {key:"Single image",  label:"Single image", target:15, color:BRAND.mud},
             {key:"Video",         label:"Video",        target:null, color:BRAND.darkGrass},
-            {key:"Unset",         label:"Unset",        target:null, color:"#555"},
           ].map(row => {
             const count = formatCounts[row.key] || 0;
             const pct = mixTotal ? Math.round((count/mixTotal)*100) : 0;
