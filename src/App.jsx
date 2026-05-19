@@ -1142,6 +1142,70 @@ function Calendar({ onSignOut }) {
   const totalPlaced = Object.values(placements).flat().length;
   const weeks = getWeeksInMonth(month);
 
+  // Find-style search navigation. Matches are placements in the current
+  // month view, ordered chronologically; activeMatchIndex tracks which
+  // one is "selected" by the up/down/Enter controls.
+  const searchMatches = [];
+  if (calendarSearch) {
+    for (const week of weeks) {
+      for (const day of week) {
+        if (!day) continue;
+        const ids = placements[day.id] || [];
+        for (const cid of ids) {
+          const c = getConcept(cid, conceptDetails);
+          if (c && matchesCalendarSearch(c)) {
+            searchMatches.push({ dayId: day.id, conceptId: cid, key: `${day.id}::${cid}` });
+          }
+        }
+      }
+    }
+  }
+  const matchKeyToIndex = {};
+  searchMatches.forEach((m, i) => { matchKeyToIndex[m.key] = i; });
+
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const matchRefs = useRef(new Map());
+  const matchCount = searchMatches.length;
+
+  // Reset position when the query changes.
+  useEffect(() => { setActiveMatchIndex(0); }, [calendarSearch]);
+
+  // Reset when switching months (matches recomputed against new view).
+  useEffect(() => { setActiveMatchIndex(0); }, [month]);
+
+  // Clamp if matches shrink (e.g. user added more characters).
+  useEffect(() => {
+    if (matchCount === 0) return;
+    if (activeMatchIndex >= matchCount) setActiveMatchIndex(0);
+  }, [matchCount, activeMatchIndex]);
+
+  // Scroll active match into view when it changes.
+  useEffect(() => {
+    if (!calendarSearch || matchCount === 0) return;
+    const m = searchMatches[activeMatchIndex];
+    if (!m) return;
+    const el = matchRefs.current.get(m.key);
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeMatchIndex, calendarSearch, matchCount]);
+
+  function stepMatch(dir) {
+    if (matchCount === 0) return;
+    setActiveMatchIndex(i => (i + dir + matchCount) % matchCount);
+  }
+
+  function onSearchKeyDown(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      stepMatch(e.shiftKey ? -1 : 1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setCalendarSearch("");
+    }
+  }
+
   // Format mix over selected window — skip Events (soft holds)
   const today = new Date(); today.setHours(0,0,0,0);
   const formatCounts = { Reel:0, Carousel:0, "Single image":0, Video:0, Story:0, Unset:0 };
@@ -1359,32 +1423,61 @@ function Calendar({ onSignOut }) {
             <div style={{fontSize:17,fontWeight:700,lineHeight:1.2}}>Content Calendar 2026</div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
-            <div style={{position:"relative",marginRight:8}}>
-              <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:12,color:BRAND.drySage,pointerEvents:"none"}}>⌕</span>
-              <input
-                value={calendarSearch}
-                onChange={e=>setCalendarSearch(e.target.value)}
-                placeholder="Search calendar…"
-                style={{
-                  width:200,
-                  background:"#FFF",
-                  border:`1px solid ${calendarSearch ? BRAND.paw : BRAND.sand}`,
-                  borderRadius:20,
-                  padding:"5px 26px 5px 24px",
-                  fontSize:12,
-                  color:BRAND.paw,
-                  outline:"none",
-                  boxSizing:"border-box",
-                  fontFamily:"inherit",
-                }}
-              />
+            <div style={{display:"flex",alignItems:"center",gap:6,marginRight:8}}>
+              <div style={{position:"relative"}}>
+                <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:12,color:BRAND.drySage,pointerEvents:"none"}}>⌕</span>
+                <input
+                  value={calendarSearch}
+                  onChange={e=>setCalendarSearch(e.target.value)}
+                  onKeyDown={onSearchKeyDown}
+                  placeholder="Search calendar…"
+                  style={{
+                    width:200,
+                    background:"#FFF",
+                    border:`1px solid ${calendarSearch ? BRAND.paw : BRAND.sand}`,
+                    borderRadius:20,
+                    padding:"5px 26px 5px 24px",
+                    fontSize:12,
+                    color:BRAND.paw,
+                    outline:"none",
+                    boxSizing:"border-box",
+                    fontFamily:"inherit",
+                  }}
+                />
+                {calendarSearch && (
+                  <button
+                    type="button"
+                    onClick={()=>setCalendarSearch("")}
+                    aria-label="Clear calendar search"
+                    style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",color:BRAND.drySage,fontSize:14,cursor:"pointer",padding:"0 4px",lineHeight:1}}
+                  >×</button>
+                )}
+              </div>
               {calendarSearch && (
-                <button
-                  type="button"
-                  onClick={()=>setCalendarSearch("")}
-                  aria-label="Clear calendar search"
-                  style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",color:BRAND.drySage,fontSize:14,cursor:"pointer",padding:"0 4px",lineHeight:1}}
-                >×</button>
+                <div style={{display:"flex",alignItems:"center",gap:4,fontFamily:"inherit"}}>
+                  <span
+                    aria-live="polite"
+                    style={{fontSize:11,color:matchCount===0?BRAND.rust:BRAND.drySage,minWidth:60,textAlign:"center",fontWeight:matchCount===0?600:400}}
+                  >
+                    {matchCount===0 ? "No matches" : `${activeMatchIndex+1} of ${matchCount}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={()=>stepMatch(-1)}
+                    disabled={matchCount===0}
+                    aria-label="Previous match"
+                    title="Previous match (Shift+Enter)"
+                    style={{background:"transparent",border:`1px solid ${BRAND.sand}`,borderRadius:4,width:22,height:22,cursor:matchCount===0?"default":"pointer",color:matchCount===0?BRAND.sand:BRAND.drySage,fontFamily:"inherit",fontSize:11,padding:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:matchCount===0?0.5:1}}
+                  >▲</button>
+                  <button
+                    type="button"
+                    onClick={()=>stepMatch(1)}
+                    disabled={matchCount===0}
+                    aria-label="Next match"
+                    title="Next match (Enter)"
+                    style={{background:"transparent",border:`1px solid ${BRAND.sand}`,borderRadius:4,width:22,height:22,cursor:matchCount===0?"default":"pointer",color:matchCount===0?BRAND.sand:BRAND.drySage,fontFamily:"inherit",fontSize:11,padding:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:matchCount===0?0.5:1}}
+                  >▼</button>
+                </div>
               )}
             </div>
             {[4,5,6,7,8,9,10,11].map(m=>(
@@ -1455,7 +1548,13 @@ function Calendar({ onSignOut }) {
                       const p=PILLARS.Timely;
                       const isMatch = matchesCalendarSearch(concept);
                       const evOpacity = calendarSearch && !isMatch ? 0.15 : fadedOpacity;
-                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none",transition:"opacity 0.12s"}}>
+                      const matchKey = `${day.id}::${concept.id}`;
+                      const isActive = calendarSearch && isMatch && matchKeyToIndex[matchKey] === activeMatchIndex;
+                      const setRef = (el) => {
+                        if (el) matchRefs.current.set(matchKey, el);
+                        else matchRefs.current.delete(matchKey);
+                      };
+                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: isActive ? `3px solid ${BRAND.rust}` : (calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none"),boxShadow: isActive ? `0 0 0 4px ${BRAND.rust}33` : "none",transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:isActive?2:"auto"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
@@ -1464,7 +1563,13 @@ function Calendar({ onSignOut }) {
                       const p=PILLARS[concept.pillar]||PILLARS.Brand;
                       const isMatch = matchesCalendarSearch(concept);
                       const evOpacity = calendarSearch && !isMatch ? 0.15 : fadedOpacity;
-                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none",transition:"opacity 0.12s"}}>
+                      const matchKey = `${day.id}::${concept.id}`;
+                      const isActive = calendarSearch && isMatch && matchKeyToIndex[matchKey] === activeMatchIndex;
+                      const setRef = (el) => {
+                        if (el) matchRefs.current.set(matchKey, el);
+                        else matchRefs.current.delete(matchKey);
+                      };
+                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: isActive ? `3px solid ${BRAND.rust}` : (calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none"),boxShadow: isActive ? `0 0 0 4px ${BRAND.rust}33` : "none",transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:isActive?2:"auto"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
