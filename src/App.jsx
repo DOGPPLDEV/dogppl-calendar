@@ -623,7 +623,7 @@ function mergeDefaults(stored) {
   return merged;
 }
 
-function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, uploading, onUpload, onRemoveMedia }) {
+function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, uploading, onUpload, onRemoveMedia, placementDays, onJumpToPlacement }) {
   const fileRef = useRef(null);
   if (!conceptId || !draft) return null;
   const pillarKeys = ["DOG","Culture","Bond","Edu","Brand","Timely","Paid","Events","Alerts","Partners"];
@@ -742,6 +742,35 @@ function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, upl
                 <input type="url" placeholder="https://" value={draft.story_cta_link||""} onChange={e=>set('story_cta_link',e.target.value)} style={inputStyle}/>
               </div>
             </>
+          )}
+
+          {placementDays && placementDays.length > 0 && (
+            <div>
+              <label style={labelStyle}>Scheduled on · {placementDays.length}</label>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {placementDays.map(({dayId, date}) => (
+                  <button
+                    key={dayId}
+                    type="button"
+                    onClick={() => onJumpToPlacement && onJumpToPlacement(dayId, conceptId)}
+                    title="Jump to this date"
+                    style={{
+                      fontSize:11,
+                      padding:"3px 9px",
+                      borderRadius:12,
+                      border:`1px solid ${BRAND.mud}`,
+                      background:"transparent",
+                      color:BRAND.mud,
+                      fontFamily:"inherit",
+                      cursor:"pointer",
+                      letterSpacing:"0.02em",
+                    }}
+                  >
+                    {MONTH_NAMES[date.getMonth()]} {date.getDate()}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           <div>
@@ -992,7 +1021,18 @@ function Calendar({ onSignOut }) {
   }
   const completeCycles = Object.values(monthCycleStats).filter(s=>s.total>=10).length;
 
-  function onDragStart(e, concept, fromDay) { setDrag({concept, fromDay}); e.dataTransfer.effectAllowed="move"; }
+  function onDragStart(e, concept, fromDay) {
+    setDrag({concept, fromDay});
+    e.dataTransfer.effectAllowed = "move";
+    // Safety net: if the drag is aborted outside any dropzone, the drop
+    // handlers never run and drag state would stay set — keeping the
+    // drag-back banner visible. dragend always fires after drop/abort.
+    const onEnd = () => {
+      setDrag(null);
+      window.removeEventListener('dragend', onEnd, true);
+    };
+    window.addEventListener('dragend', onEnd, true);
+  }
   function onDragOver(e) { e.preventDefault(); }
   function onDropDay(e, dayId) {
     e.preventDefault(); if(!drag) return;
@@ -1142,6 +1182,21 @@ function Calendar({ onSignOut }) {
   const totalPlaced = Object.values(placements).flat().length;
   const weeks = getWeeksInMonth(month);
 
+  // Precomputed count of how many days each concept is placed on.
+  const placementCountByConcept = (() => {
+    const counts = {};
+    for (const ids of Object.values(placements)) {
+      for (const id of ids) counts[id] = (counts[id] || 0) + 1;
+    }
+    return counts;
+  })();
+
+  function getPlacementDays(conceptId) {
+    return ALL_DAYS
+      .filter(d => (placements[d.id] || []).includes(conceptId))
+      .map(d => ({ dayId: d.id, date: d.date }));
+  }
+
   // Find-style search navigation. Matches are placements in the current
   // month view, ordered chronologically; activeMatchIndex tracks which
   // one is "selected" by the up/down/Enter controls.
@@ -1204,6 +1259,19 @@ function Calendar({ onSignOut }) {
       e.preventDefault();
       setCalendarSearch("");
     }
+  }
+
+  function jumpToPlacement(dayId, conceptId) {
+    const day = ALL_DAYS.find(d => d.id === dayId);
+    if (!day) return;
+    if (day.month !== month) setMonth(day.month);
+    // Give the new month a tick to render before scrolling.
+    setTimeout(() => {
+      const el = matchRefs.current.get(`${dayId}::${conceptId}`);
+      if (el && typeof el.scrollIntoView === 'function') {
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }, 60);
   }
 
   // Format mix over selected window — skip Events (soft holds)
@@ -1289,9 +1357,27 @@ function Calendar({ onSignOut }) {
           </div>
           <div style={{fontSize:10,color:"#a0a0a0",marginTop:5}}>{filtered.length} shown · {totalPlaced} placed</div>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"6px 10px"}}>
+        {drag && drag.fromDay && (
+          <div style={{
+            fontSize:10,
+            letterSpacing:"0.1em",
+            textTransform:"uppercase",
+            color:BRAND.mud,
+            background:"#241f1a",
+            border:`1px dashed ${BRAND.mud}`,
+            borderRadius:4,
+            padding:"6px 10px",
+            margin:"6px 10px 0",
+            textAlign:"center",
+            flexShrink:0,
+          }}>
+            Drop here to remove from calendar
+          </div>
+        )}
+        <div style={{flex:1,overflowY:"auto",padding:"6px 10px",border:`1px dashed ${drag && drag.fromDay ? BRAND.mud : "transparent"}`,borderRadius:4,margin:"0 4px",transition:"border-color 0.12s"}}>
           {filtered.map(c=>{
             const placed=usedIds.has(c.id);
+            const placedCount = placementCountByConcept[c.id] || 0;
             const p=PILLARS[c.pillar]||PILLARS.Brand;
             const needsPlacement = c.id === needsPlacementId;
             return (
@@ -1319,7 +1405,7 @@ function Calendar({ onSignOut }) {
                   <span style={{fontSize:10,color:"#a0a0a0"}}>·</span>
                   <span style={{fontSize:10,color:"#a0a0a0"}}>{c.tier}</span>
                   {needsPlacement && <span style={{fontSize:10,color:"#E5BC2A",marginLeft:"auto",textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:600}}>needs placement</span>}
-                  {!needsPlacement && placed && <span style={{fontSize:10,color:"#b8b8b8",marginLeft:"auto"}}>placed</span>}
+                  {!needsPlacement && placedCount > 0 && <span style={{fontSize:10,color:"#b8b8b8",marginLeft:"auto"}}>placed ×{placedCount}</span>}
                 </div>
               </div>
             );
@@ -1547,14 +1633,25 @@ function Calendar({ onSignOut }) {
                     {timelyPosts.map(concept=>{
                       const p=PILLARS.Timely;
                       const isMatch = matchesCalendarSearch(concept);
-                      const evOpacity = calendarSearch && !isMatch ? 0.15 : fadedOpacity;
+                      const isSelected = selectedConceptId && concept.id === selectedConceptId;
+                      const evOpacity = calendarSearch && !isMatch && !isSelected ? 0.15 : fadedOpacity;
                       const matchKey = `${day.id}::${concept.id}`;
                       const isActive = calendarSearch && isMatch && matchKeyToIndex[matchKey] === activeMatchIndex;
                       const setRef = (el) => {
                         if (el) matchRefs.current.set(matchKey, el);
                         else matchRefs.current.delete(matchKey);
                       };
-                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: isActive ? `3px solid ${BRAND.rust}` : (calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none"),boxShadow: isActive ? `0 0 0 4px ${BRAND.rust}33` : "none",transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:isActive?2:"auto"}}>
+                      const outline = isSelected
+                        ? `3px solid ${BRAND.mud}`
+                        : isActive
+                          ? `3px solid ${BRAND.rust}`
+                          : (calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none");
+                      const boxShadow = isSelected
+                        ? `0 0 0 4px ${BRAND.mud}55`
+                        : isActive
+                          ? `0 0 0 4px ${BRAND.rust}33`
+                          : "none";
+                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline,boxShadow,transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:(isSelected||isActive)?2:"auto"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
@@ -1562,14 +1659,25 @@ function Calendar({ onSignOut }) {
                     {dayPosts.filter(c=>c.pillar!=="Timely").map(concept=>{
                       const p=PILLARS[concept.pillar]||PILLARS.Brand;
                       const isMatch = matchesCalendarSearch(concept);
-                      const evOpacity = calendarSearch && !isMatch ? 0.15 : fadedOpacity;
+                      const isSelected = selectedConceptId && concept.id === selectedConceptId;
+                      const evOpacity = calendarSearch && !isMatch && !isSelected ? 0.15 : fadedOpacity;
                       const matchKey = `${day.id}::${concept.id}`;
                       const isActive = calendarSearch && isMatch && matchKeyToIndex[matchKey] === activeMatchIndex;
                       const setRef = (el) => {
                         if (el) matchRefs.current.set(matchKey, el);
                         else matchRefs.current.delete(matchKey);
                       };
-                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: isActive ? `3px solid ${BRAND.rust}` : (calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none"),boxShadow: isActive ? `0 0 0 4px ${BRAND.rust}33` : "none",transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:isActive?2:"auto"}}>
+                      const outline = isSelected
+                        ? `3px solid ${BRAND.mud}`
+                        : isActive
+                          ? `3px solid ${BRAND.rust}`
+                          : (calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none");
+                      const boxShadow = isSelected
+                        ? `0 0 0 4px ${BRAND.mud}55`
+                        : isActive
+                          ? `0 0 0 4px ${BRAND.rust}33`
+                          : "none";
+                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline,boxShadow,transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:(isSelected||isActive)?2:"auto"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
@@ -1593,6 +1701,8 @@ function Calendar({ onSignOut }) {
         uploading={uploadingMedia}
         onUpload={handleUploadMedia}
         onRemoveMedia={handleRemoveMedia}
+        placementDays={selectedConceptId ? getPlacementDays(selectedConceptId) : []}
+        onJumpToPlacement={jumpToPlacement}
       />
     </div>
   );
