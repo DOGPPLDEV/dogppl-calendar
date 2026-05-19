@@ -486,8 +486,22 @@ async function saveConceptDetail(detail) {
 
 function getConcept(id, details) {
   const base = CONCEPTS.find(c => c.id === id);
-  if (!base) return null;
   const o = details && details[id];
+  // Boneyard-born concepts live in concept_details with no entry in the
+  // static CONCEPTS seed. Synthesize a minimal base so the sidebar, drag
+  // sources, format mix, and panel can all resolve them by id alone.
+  if (!base) {
+    if (!o) return null;
+    return {
+      id,
+      title: o.title || id,
+      pillar: o.pillar || 'Brand',
+      tier: o.tier || 'T3',
+      note: o.description || '',
+      preferred_format: o.preferred_format ?? null,
+      status: o.status || 'approved',
+    };
+  }
   if (!o) return { ...base, status: 'approved' };
   return {
     ...base,
@@ -815,6 +829,58 @@ function Calendar({ onSignOut }) {
     try { localStorage.setItem("dogppl-format-window", formatWindow); } catch(e) {}
   }, [formatWindow]);
 
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    try {
+      const v = parseInt(localStorage.getItem("dogppl-sidebar-width") || "", 10);
+      if (!Number.isFinite(v)) return 248;
+      return Math.min(480, Math.max(240, v));
+    } catch(e) { return 248; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("dogppl-sidebar-width", String(sidebarWidth)); } catch(e) {}
+  }, [sidebarWidth]);
+
+  const [trackerCollapsed, setTrackerCollapsed] = useState(() => {
+    try { return localStorage.getItem("dogppl-tracker-collapsed") === "1"; } catch(e) { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("dogppl-tracker-collapsed", trackerCollapsed ? "1" : "0"); } catch(e) {}
+  }, [trackerCollapsed]);
+
+  const [calendarSearch, setCalendarSearch] = useState("");
+
+  function startSidebarResize(e) {
+    e.preventDefault();
+    const onMove = (ev) => {
+      const w = Math.min(480, Math.max(240, ev.clientX));
+      setSidebarWidth(w);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
+  function matchesCalendarSearch(concept) {
+    if (!calendarSearch) return true;
+    const q = calendarSearch.toLowerCase();
+    if ((concept.title || "").toLowerCase().includes(q)) return true;
+    if ((concept.pillar || "").toLowerCase().includes(q)) return true;
+    if ((concept.tier || "").toLowerCase().includes(q)) return true;
+    const detail = conceptDetails[concept.id];
+    if (detail) {
+      if ((detail.description || "").toLowerCase().includes(q)) return true;
+      if ((detail.caption || "").toLowerCase().includes(q)) return true;
+    }
+    return false;
+  }
+
   const saveTimer = useRef(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -888,9 +954,16 @@ function Calendar({ onSignOut }) {
   const usedIds = new Set(Object.values(placements).flat());
   // Only "schedulable" concepts (approved + production) populate the
   // calendar's sidebar and coverage charts. Sketches, deployed, and
-  // buried concepts live in the Boneyard but disappear here.
-  const effectiveConcepts = CONCEPTS
-    .map(c => getConcept(c.id, conceptDetails))
+  // buried concepts live in the Boneyard but disappear here. Union the
+  // static seed with any boneyard-born concept_details rows so concepts
+  // created in the Boneyard show up here once they hit production.
+  const allConceptIds = (() => {
+    const ids = new Set(CONCEPTS.map(c => c.id));
+    for (const k of Object.keys(conceptDetails || {})) ids.add(k);
+    return ids;
+  })();
+  const effectiveConcepts = [...allConceptIds]
+    .map(id => getConcept(id, conceptDetails))
     .filter(c => c && SCHEDULABLE_STATUSES.has(c.status));
   const filtered = effectiveConcepts
     .filter(c => {
@@ -943,29 +1016,56 @@ function Calendar({ onSignOut }) {
     setPlacements(prev=>{const next={...prev};next[dayId]=(next[dayId]||[]).filter(id=>id!==cid);if(!next[dayId].length)delete next[dayId];return next;});
   }
 
-  // Read ?concept=<id> on load and open that concept's panel.
+  // Concept arriving via "Send to Calendar" deep-link. Sidebar highlights
+  // it until it lands on a day; once a placement exists we clear it.
+  const [needsPlacementId, setNeedsPlacementId] = useState(null);
+
+  // Read ?concept=<id>[&place=1] on load. With place=1 we don't open the
+  // panel — we surface the concept in the sidebar in a "needs placement"
+  // state so the user can drag it onto a day.
   useEffect(() => {
     if (!loaded) return;
     const url = new URL(window.location.href);
     const wanted = url.searchParams.get('concept');
+    const place = url.searchParams.get('place') === '1';
     if (!wanted) return;
-    if (CONCEPTS.find(c => c.id === wanted)) openPanel(wanted);
+    const c = getConcept(wanted, conceptDetails);
+    if (c) {
+      if (place) {
+        // Reset filters so the concept isn't filtered out, then mark it
+        // for the highlight treatment in the sidebar.
+        setFilterPillar('ALL');
+        setFilterTier('ALL');
+        setSearch('');
+        setNeedsPlacementId(wanted);
+      } else {
+        openPanel(wanted);
+      }
+    }
     url.searchParams.delete('concept');
+    url.searchParams.delete('place');
     window.history.replaceState({}, '', url.pathname + (url.search || ''));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
+  // Clear the needs-placement highlight once the concept is actually
+  // placed somewhere on the calendar.
+  useEffect(() => {
+    if (!needsPlacementId) return;
+    if (usedIds.has(needsPlacementId)) setNeedsPlacementId(null);
+  }, [usedIds, needsPlacementId]);
+
   function openPanel(id) {
-    const base = CONCEPTS.find(c => c.id === id);
-    if (!base) return;
+    const resolved = getConcept(id, conceptDetails);
+    if (!resolved) return;
     const stored = conceptDetails[id] || {};
     setPanelDraft({
       id,
-      title: stored.title ?? base.title,
-      pillar: stored.pillar ?? base.pillar,
-      tier: stored.tier ?? base.tier,
-      preferred_format: stored.preferred_format ?? base.preferred_format ?? "",
-      description: stored.description ?? base.note ?? "",
+      title: stored.title ?? resolved.title,
+      pillar: stored.pillar ?? resolved.pillar,
+      tier: stored.tier ?? resolved.tier,
+      preferred_format: stored.preferred_format ?? resolved.preferred_format ?? "",
+      description: stored.description ?? resolved.note ?? "",
       caption: stored.caption ?? "",
       format_type: stored.format_type ?? "",
       post_media_type: stored.post_media_type ?? "",
@@ -1072,15 +1172,47 @@ function Calendar({ onSignOut }) {
   return (
     <div style={{display:"flex",height:"100vh",fontFamily:"'Georgia',serif",background:BRAND.bone,color:BRAND.paw,overflow:"hidden"}}>
       {/* SIDEBAR */}
-      <div style={{width:248,flexShrink:0,background:BRAND.paw,color:BRAND.bone,display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"system-ui, -apple-system, 'Segoe UI', sans-serif"}}
+      <div style={{width:sidebarWidth,flexShrink:0,background:BRAND.paw,color:BRAND.bone,display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"system-ui, -apple-system, 'Segoe UI', sans-serif",position:"relative"}}
         onDragOver={onDragOver} onDrop={onDropLib}>
+        <div
+          onMouseDown={startSidebarResize}
+          onDoubleClick={()=>setSidebarWidth(248)}
+          title="Drag to resize · Double-click to reset"
+          style={{position:"absolute",top:0,right:-3,bottom:0,width:6,cursor:"col-resize",zIndex:10}}
+        />
         <div style={{padding:"14px 13px 10px",borderBottom:"1px solid #2a2a2a"}}>
           <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:6}}>
             <div style={{fontSize:10,letterSpacing:"0.14em",textTransform:"uppercase",color:BRAND.sand}}>The Boneyard</div>
             <a href="https://boneyard.dogppl.co" target="_blank" rel="noopener" style={{fontFamily:"ui-monospace, 'JetBrains Mono', monospace",fontSize:9,letterSpacing:"0.12em",textTransform:"uppercase",color:BRAND.mud,textDecoration:"none"}}>Open full vault →</a>
           </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search concepts…"
-            style={{width:"100%",background:"#1e1e1e",border:"none",borderRadius:4,padding:"6px 8px",fontSize:12,color:BRAND.bone,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          <div style={{position:"relative",marginTop:2}}>
+            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:BRAND.sand,pointerEvents:"none"}}>⌕</span>
+            <input
+              value={search}
+              onChange={e=>setSearch(e.target.value)}
+              placeholder="Search concepts by name…"
+              style={{
+                width:"100%",
+                background:"#1e1e1e",
+                border:`1px solid ${search ? BRAND.sand : "#2e2e2e"}`,
+                borderRadius:4,
+                padding:"7px 26px 7px 22px",
+                fontSize:13,
+                color:BRAND.bone,
+                outline:"none",
+                boxSizing:"border-box",
+                fontFamily:"inherit",
+              }}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={()=>setSearch("")}
+                aria-label="Clear search"
+                style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",color:"#9a9a9a",fontSize:14,cursor:"pointer",padding:"0 4px",lineHeight:1}}
+              >×</button>
+            )}
+          </div>
           <div style={{display:"flex",gap:3,marginTop:7,flexWrap:"wrap"}}>
             {["ALL","DOG","Culture","Bond","Edu","Brand","Timely","Paid","Events","Alerts","Partners"].map(p=>(
               <button key={p} onClick={()=>setFilterPillar(p)} className={`lib-chip${filterPillar===p?" is-active":""}`} style={{letterSpacing:"0.04em",textTransform:"uppercase",background:filterPillar===p?(PILLARS[p]?.color||BRAND.grass):undefined}}>{p}</button>
@@ -1097,14 +1229,33 @@ function Calendar({ onSignOut }) {
           {filtered.map(c=>{
             const placed=usedIds.has(c.id);
             const p=PILLARS[c.pillar]||PILLARS.Brand;
+            const needsPlacement = c.id === needsPlacementId;
             return (
-              <div key={c.id} draggable onDragStart={e=>onDragStart(e,c,null)} onClick={()=>openPanel(c.id)} style={{background:placed?"#2e2e2e":"#242424",borderLeft:`3px solid ${placed?p.color+"cc":p.color}`,border:`1px solid ${placed?"#3a3a3a":"#333"}`,borderLeftWidth:3,borderRadius:4,padding:"6px 8px",marginBottom:4,cursor:"grab"}}>
-                <div style={{fontSize:12,fontWeight:placed?400:600,color:placed?"#c4c4c4":BRAND.bone,lineHeight:1.3,fontFamily:"'Georgia',serif"}}>{c.title}</div>
-                <div style={{display:"flex",gap:4,marginTop:3}}>
-                  <span style={{fontSize:9,fontWeight:600,color:placed?(p.sidebarColor||p.color)+"d9":(p.sidebarColor||p.color),textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
-                  <span style={{fontSize:9,color:"#a0a0a0"}}>·</span>
-                  <span style={{fontSize:9,color:"#a0a0a0"}}>{c.tier}</span>
-                  {placed&&<span style={{fontSize:9,color:"#b8b8b8",marginLeft:"auto"}}>placed</span>}
+              <div
+                key={c.id}
+                ref={needsPlacement ? (el => el && el.scrollIntoView({block:"nearest"})) : undefined}
+                draggable
+                onDragStart={e=>onDragStart(e,c,null)}
+                onClick={()=>openPanel(c.id)}
+                style={{
+                  background: needsPlacement ? "#3a3a2e" : (placed?"#2e2e2e":"#242424"),
+                  borderLeft: `3px solid ${needsPlacement ? "#E5BC2A" : (placed?p.color+"cc":p.color)}`,
+                  border: `1px solid ${needsPlacement ? "#E5BC2A" : (placed?"#3a3a3a":"#333")}`,
+                  borderLeftWidth: 3,
+                  borderRadius: 4,
+                  padding: "6px 8px",
+                  marginBottom: 4,
+                  cursor: "grab",
+                  boxShadow: needsPlacement ? "0 0 0 1px #E5BC2A66" : undefined,
+                }}
+              >
+                <div style={{fontSize:14,fontWeight:placed?500:600,color:placed?"#c4c4c4":BRAND.bone,lineHeight:1.35}}>{c.title}</div>
+                <div style={{display:"flex",gap:5,marginTop:4,alignItems:"center"}}>
+                  <span style={{fontSize:10,fontWeight:600,color:placed?(p.sidebarColor||p.color)+"d9":(p.sidebarColor||p.color),textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.pillar}</span>
+                  <span style={{fontSize:10,color:"#a0a0a0"}}>·</span>
+                  <span style={{fontSize:10,color:"#a0a0a0"}}>{c.tier}</span>
+                  {needsPlacement && <span style={{fontSize:10,color:"#E5BC2A",marginLeft:"auto",textTransform:"uppercase",letterSpacing:"0.08em",fontWeight:600}}>needs placement</span>}
+                  {!needsPlacement && placed && <span style={{fontSize:10,color:"#b8b8b8",marginLeft:"auto"}}>placed</span>}
                 </div>
               </div>
             );
@@ -1208,6 +1359,34 @@ function Calendar({ onSignOut }) {
             <div style={{fontSize:17,fontWeight:700,lineHeight:1.2}}>Content Calendar 2026</div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
+            <div style={{position:"relative",marginRight:8}}>
+              <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:12,color:BRAND.drySage,pointerEvents:"none"}}>⌕</span>
+              <input
+                value={calendarSearch}
+                onChange={e=>setCalendarSearch(e.target.value)}
+                placeholder="Search calendar…"
+                style={{
+                  width:200,
+                  background:"#FFF",
+                  border:`1px solid ${calendarSearch ? BRAND.paw : BRAND.sand}`,
+                  borderRadius:20,
+                  padding:"5px 26px 5px 24px",
+                  fontSize:12,
+                  color:BRAND.paw,
+                  outline:"none",
+                  boxSizing:"border-box",
+                  fontFamily:"inherit",
+                }}
+              />
+              {calendarSearch && (
+                <button
+                  type="button"
+                  onClick={()=>setCalendarSearch("")}
+                  aria-label="Clear calendar search"
+                  style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",color:BRAND.drySage,fontSize:14,cursor:"pointer",padding:"0 4px",lineHeight:1}}
+                >×</button>
+              )}
+            </div>
             {[4,5,6,7,8,9,10,11].map(m=>(
               <button key={m} onClick={()=>setMonth(m)} style={{fontSize:12,padding:"4px 11px",borderRadius:20,fontFamily:"inherit",cursor:"pointer",border:`1px solid ${month===m?BRAND.paw:BRAND.sand}`,background:month===m?BRAND.paw:"transparent",color:month===m?BRAND.bone:BRAND.drySage}}>{MONTH_NAMES[m]}</button>
             ))}
@@ -1217,13 +1396,20 @@ function Calendar({ onSignOut }) {
           </div>
         </div>
 
-        <div style={{background:"#F8F7F4",borderBottom:`1px solid ${BRAND.sand}`,padding:"8px 18px",flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-            <span style={{fontSize:10,letterSpacing:"0.1em",textTransform:"uppercase",color:BRAND.drySage,flexShrink:0}}>3-2-2-2-1 per 10 posts →</span>
-            {CORE_PILLARS.map(pk=>{const p=PILLARS[pk];return(<span key={pk} style={{fontSize:10,padding:"2px 9px",borderRadius:10,background:p.bg,color:p.color,fontWeight:600,letterSpacing:"0.04em",flexShrink:0}}>{p.label} ×{CYCLE_TARGET[pk]}</span>);})}
+        <div style={{background:"#F8F7F4",borderBottom:`1px solid ${BRAND.sand}`,padding:trackerCollapsed?"6px 18px":"8px 18px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:trackerCollapsed?0:6,flexWrap:"wrap"}}>
+            <button
+              type="button"
+              onClick={()=>setTrackerCollapsed(v=>!v)}
+              title={trackerCollapsed?"Expand cycle tracker":"Collapse cycle tracker"}
+              aria-label={trackerCollapsed?"Expand cycle tracker":"Collapse cycle tracker"}
+              style={{background:"transparent",border:"none",cursor:"pointer",color:BRAND.drySage,fontSize:11,padding:"0 2px",lineHeight:1,flexShrink:0,fontFamily:"inherit"}}
+            >{trackerCollapsed?"▸":"▾"}</button>
+            <span style={{fontSize:10,letterSpacing:"0.1em",textTransform:"uppercase",color:BRAND.drySage,flexShrink:0}}>3-2-2-2-1 per 10 posts {trackerCollapsed?"":"→"}</span>
+            {!trackerCollapsed && CORE_PILLARS.map(pk=>{const p=PILLARS[pk];return(<span key={pk} style={{fontSize:10,padding:"2px 9px",borderRadius:10,background:p.bg,color:p.color,fontWeight:600,letterSpacing:"0.04em",flexShrink:0}}>{p.label} ×{CYCLE_TARGET[pk]}</span>);})}
             <span style={{marginLeft:"auto",fontSize:10,color:BRAND.drySage,flexShrink:0}}>{Object.keys(monthCycleStats).length} cycle{Object.keys(monthCycleStats).length!==1?"s":""} · {completeCycles} complete</span>
           </div>
-          {Object.entries(monthCycleStats).length===0?(
+          {!trackerCollapsed && (Object.entries(monthCycleStats).length===0?(
             <div style={{fontSize:10,color:"#CCC",fontStyle:"italic"}}>No posts placed yet.</div>
           ):Object.entries(monthCycleStats).map(([cyc,stats])=>{
             const complete = stats.total>=10;
@@ -1239,7 +1425,7 @@ function Calendar({ onSignOut }) {
                 </div>
               </div>
             );
-          })}
+          }))}
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
@@ -1267,14 +1453,18 @@ function Calendar({ onSignOut }) {
                     </div>
                     {timelyPosts.map(concept=>{
                       const p=PILLARS.Timely;
-                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:fadedOpacity}}>
+                      const isMatch = matchesCalendarSearch(concept);
+                      const evOpacity = calendarSearch && !isMatch ? 0.15 : fadedOpacity;
+                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none",transition:"opacity 0.12s"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
                     })}
                     {dayPosts.filter(c=>c.pillar!=="Timely").map(concept=>{
                       const p=PILLARS[concept.pillar]||PILLARS.Brand;
-                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:fadedOpacity}}>
+                      const isMatch = matchesCalendarSearch(concept);
+                      const evOpacity = calendarSearch && !isMatch ? 0.15 : fadedOpacity;
+                      return(<div key={concept.id} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline: calendarSearch && isMatch ? `2px solid ${BRAND.paw}` : "none",transition:"opacity 0.12s"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
