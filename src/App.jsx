@@ -1024,15 +1024,11 @@ function Calendar({ onSignOut }) {
   function onDragStart(e, concept, fromDay) {
     setDrag({concept, fromDay});
     e.dataTransfer.effectAllowed = "move";
-    // Safety net: if the drag is aborted outside any dropzone, the drop
-    // handlers never run and drag state would stay set — keeping the
-    // drag-back banner visible. dragend always fires after drop/abort.
-    const onEnd = () => {
-      setDrag(null);
-      window.removeEventListener('dragend', onEnd, true);
-    };
-    window.addEventListener('dragend', onEnd, true);
   }
+  // Clear drag state on abort. Lives on the element so unmounted sources
+  // (e.g. an event div removed mid-drag by drag-back to sidebar) can't
+  // leak listeners or fire late onto a subsequent drag.
+  function onDragEnd() { setDrag(null); }
   function onDragOver(e) { e.preventDefault(); }
   function onDropDay(e, dayId) {
     e.preventDefault(); if(!drag) return;
@@ -1386,6 +1382,7 @@ function Calendar({ onSignOut }) {
                 ref={needsPlacement ? (el => el && el.scrollIntoView({block:"nearest"})) : undefined}
                 draggable
                 onDragStart={e=>onDragStart(e,c,null)}
+                onDragEnd={onDragEnd}
                 onClick={()=>openPanel(c.id)}
                 style={{
                   background: needsPlacement ? "#3a3a2e" : (placed?"#2e2e2e":"#242424"),
@@ -1651,7 +1648,7 @@ function Calendar({ onSignOut }) {
                         : isActive
                           ? `0 0 0 4px ${BRAND.rust}33`
                           : "none";
-                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline,boxShadow,transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:(isSelected||isActive)?2:"auto"}}>
+                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onDragEnd={onDragEnd} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline,boxShadow,transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:(isSelected||isActive)?2:"auto"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
@@ -1677,7 +1674,7 @@ function Calendar({ onSignOut }) {
                         : isActive
                           ? `0 0 0 4px ${BRAND.rust}33`
                           : "none";
-                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline,boxShadow,transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:(isSelected||isActive)?2:"auto"}}>
+                      return(<div key={concept.id} ref={setRef} draggable onDragStart={e=>onDragStart(e,concept,day.id)} onDragEnd={onDragEnd} onClick={e=>{e.stopPropagation();openPanel(concept.id);}} style={{background:p.bg,borderLeft:`2px solid ${p.color}`,borderRadius:3,padding:"3px 5px",marginBottom:2,cursor:"grab",display:"flex",alignItems:"flex-start",gap:3,opacity:evOpacity,outline,boxShadow,transition:"opacity 0.12s, box-shadow 0.12s, outline-color 0.12s",position:"relative",zIndex:(isSelected||isActive)?2:"auto"}}>
                         <span style={{fontSize:11,flex:1,color:BRAND.paw,lineHeight:1.35}}>{concept.title}</span>
                         <button onClick={e=>{e.stopPropagation();remove(concept.id,day.id);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:BRAND.sand,padding:0,flexShrink:0}}>×</button>
                       </div>);
