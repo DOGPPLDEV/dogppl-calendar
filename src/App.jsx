@@ -1734,6 +1734,13 @@ function Calendar({ onSignOut }) {
                 title="Redo (⇧⌘Z)"
                 style={{background:"transparent",border:`1px solid ${BRAND.sand}`,borderRadius:4,width:24,height:24,cursor:history.canRedo?"pointer":"default",color:history.canRedo?BRAND.paw:BRAND.sand,fontFamily:"inherit",fontSize:13,padding:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:history.canRedo?1:0.5}}
               >↷</button>
+              {/* TEMP: Sentry smoke test — remove once confirmed in Sentry */}
+              <button
+                type="button"
+                onClick={() => { throw new Error('Sentry test error'); }}
+                title="Throw an uncaught error to verify Sentry capture"
+                style={{background:"transparent",border:"1px solid #c0392b",borderRadius:4,height:24,padding:"0 8px",marginLeft:6,cursor:"pointer",color:"#c0392b",fontFamily:"inherit",fontSize:11}}
+              >Throw test error</button>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6,marginRight:8}}>
               <div style={{position:"relative"}}>
