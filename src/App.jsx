@@ -470,6 +470,16 @@ async function loadConceptDetails() {
   return map;
 }
 
+// Strip server-managed timestamp columns when comparing a row that
+// came back via realtime against the row we have locally — the local
+// copy may lack updated_at, but the data we care about is identical.
+function detailRowEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify({...a, updated_at: undefined, created_at: undefined})
+      === JSON.stringify({...b, updated_at: undefined, created_at: undefined});
+}
+
 async function saveConceptDetail(detail) {
   if (!supabase) {
     try {
@@ -1047,6 +1057,7 @@ function Calendar({ onSignOut }) {
 
   const saveTimer = useRef(null);
   const saveDetailsTimer = useRef(null);
+  const placementsLastSaved = useRef(null);
   const conceptDetailsLastSaved = useRef(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -1057,6 +1068,7 @@ function Calendar({ onSignOut }) {
       const merged = mergeDefaults(stored);
       setPlacements(merged);
       setConceptDetails(details || {});
+      placementsLastSaved.current = merged;
       conceptDetailsLastSaved.current = details || {};
       setLoaded(true);
       // Best-effort deployment auto-sync — don't block UI or surface errors.
@@ -1072,6 +1084,9 @@ function Calendar({ onSignOut }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       setSyncing(true);
+      // Stamp before sending so the realtime echo of this write can be
+      // recognized as our own and skipped.
+      placementsLastSaved.current = placements;
       await saveToSupabase(placements);
       setSyncing(false);
       setLastSaved(new Date());
@@ -1086,12 +1101,16 @@ function Calendar({ onSignOut }) {
     if (saveDetailsTimer.current) clearTimeout(saveDetailsTimer.current);
     saveDetailsTimer.current = setTimeout(async () => {
       const prev = conceptDetailsLastSaved.current || {};
+      const toSave = [];
       for (const id of Object.keys(conceptDetails)) {
-        if (prev[id] !== conceptDetails[id]) {
-          try { await saveConceptDetail(conceptDetails[id]); } catch(e) { console.warn(e); }
-        }
+        if (prev[id] !== conceptDetails[id]) toSave.push(conceptDetails[id]);
       }
+      // Stamp before awaiting so realtime echoes of these writes are
+      // recognized as our own.
       conceptDetailsLastSaved.current = conceptDetails;
+      for (const row of toSave) {
+        try { await saveConceptDetail(row); } catch(e) { console.warn(e); }
+      }
     }, 800);
     return () => clearTimeout(saveDetailsTimer.current);
   }, [conceptDetails, loaded]);
@@ -1107,9 +1126,16 @@ function Calendar({ onSignOut }) {
         table: 'calendar_state',
         filter: 'id=eq.1'
       }, (payload) => {
-        if (payload.new?.placements) {
-          setPlacements(payload.new.placements);
+        if (!payload.new?.placements) return;
+        // Skip echoes of our own write — content matches the stamp set
+        // in the save effect (or savePanel). Stops the self-perpetuating
+        // save→echo→set→save loop that overwrote in-flight drops.
+        if (placementsLastSaved.current &&
+            JSON.stringify(payload.new.placements) === JSON.stringify(placementsLastSaved.current)) {
+          return;
         }
+        placementsLastSaved.current = payload.new.placements;
+        setPlacements(payload.new.placements);
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -1127,7 +1153,21 @@ function Calendar({ onSignOut }) {
             if (payload.old && payload.old.id) delete next[payload.old.id];
             return next;
           });
+          if (payload.old?.id && conceptDetailsLastSaved.current) {
+            const next = {...conceptDetailsLastSaved.current};
+            delete next[payload.old.id];
+            conceptDetailsLastSaved.current = next;
+          }
         } else if (payload.new) {
+          // Skip echoes of our own write — the row matches the stamp set
+          // in the save effect. Without this, the realtime echo overwrites
+          // edits made between the save firing and the echo arriving.
+          const prev = conceptDetailsLastSaved.current?.[payload.new.id];
+          if (detailRowEqual(prev, payload.new)) return;
+          conceptDetailsLastSaved.current = {
+            ...(conceptDetailsLastSaved.current || {}),
+            [payload.new.id]: payload.new,
+          };
           setConceptDetails(prev => ({...prev, [payload.new.id]: payload.new}));
         }
       })
