@@ -623,11 +623,102 @@ function mergeDefaults(stored) {
   return merged;
 }
 
-function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, uploading, onUpload, onRemoveMedia, placementDays, onJumpToPlacement }) {
+// Undo/redo stack for snapshots of {placements, conceptDetails, panelDraft}.
+// Stacks live in a ref so undo/redo are synchronous; a version counter
+// triggers re-renders so consumers see updated canUndo/canRedo.
+function useHistoryStack({ cap = 50, debounceMs = 600 } = {}) {
+  const stacksRef = useRef({ undo: [], redo: [] });
+  const debounceRef = useRef({ key: null, timer: null });
+  const [, setVersion] = useState(0);
+  const rerender = () => setVersion(v => v + 1);
+
+  function rawPush(snapshot) {
+    const s = stacksRef.current;
+    s.undo.push(snapshot);
+    if (s.undo.length > cap) s.undo.shift();
+    s.redo.length = 0;
+  }
+
+  const flushDebounce = useCallback(() => {
+    const d = debounceRef.current;
+    if (d.timer) clearTimeout(d.timer);
+    d.timer = null;
+    d.key = null;
+  }, []);
+
+  const push = useCallback((snapshot) => {
+    flushDebounce();
+    rawPush(snapshot);
+    rerender();
+  }, [flushDebounce]);
+
+  const pushDebounced = useCallback((snapshot, key) => {
+    const d = debounceRef.current;
+    if (d.key === key && d.timer) {
+      clearTimeout(d.timer);
+      d.timer = setTimeout(() => { d.timer = null; d.key = null; }, debounceMs);
+      return;
+    }
+    if (d.timer) clearTimeout(d.timer);
+    rawPush(snapshot);
+    d.key = key;
+    d.timer = setTimeout(() => { d.timer = null; d.key = null; }, debounceMs);
+    rerender();
+  }, [debounceMs]);
+
+  const undo = useCallback((currentSnapshot) => {
+    const s = stacksRef.current;
+    if (s.undo.length === 0) return null;
+    const popped = s.undo.pop();
+    s.redo.push(currentSnapshot);
+    if (s.redo.length > cap) s.redo.shift();
+    flushDebounce();
+    rerender();
+    return popped;
+  }, [flushDebounce]);
+
+  const redo = useCallback((currentSnapshot) => {
+    const s = stacksRef.current;
+    if (s.redo.length === 0) return null;
+    const popped = s.redo.pop();
+    s.undo.push(currentSnapshot);
+    if (s.undo.length > cap) s.undo.shift();
+    flushDebounce();
+    rerender();
+    return popped;
+  }, [flushDebounce]);
+
+  // Drop entries matching predicate from both stacks (e.g. panel-text
+  // snapshots after panel close).
+  const prune = useCallback((shouldDrop) => {
+    const s = stacksRef.current;
+    s.undo = s.undo.filter(e => !shouldDrop(e));
+    s.redo = s.redo.filter(e => !shouldDrop(e));
+    flushDebounce();
+    rerender();
+  }, [flushDebounce]);
+
+  return {
+    push,
+    pushDebounced,
+    flushDebounce,
+    prune,
+    undo,
+    redo,
+    canUndo: stacksRef.current.undo.length > 0,
+    canRedo: stacksRef.current.redo.length > 0,
+  };
+}
+
+function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, uploading, onUpload, onRemoveMedia, placementDays, onJumpToPlacement, onBeforeEdit, onPanelEditBlur }) {
   const fileRef = useRef(null);
   if (!conceptId || !draft) return null;
   const pillarKeys = ["DOG","Culture","Bond","Edu","Brand","Timely","Paid","Events","Alerts","Partners"];
-  const set = (k,v) => setDraft(d => d ? {...d, [k]: v} : d);
+  const set = (k,v) => {
+    if (onBeforeEdit) onBeforeEdit();
+    setDraft(d => d ? {...d, [k]: v} : d);
+  };
+  const blurFlush = () => { if (onPanelEditBlur) onPanelEditBlur(); };
 
   function onFilePick(e) {
     const files = Array.from(e.target.files || []);
@@ -657,7 +748,7 @@ function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, upl
         <div style={{flex:1,overflowY:"auto",padding:"14px 18px",display:"flex",flexDirection:"column",gap:12}}>
           <div>
             <label style={labelStyle}>Title</label>
-            <input value={draft.title||""} onChange={e=>set('title',e.target.value)} style={inputStyle}/>
+            <input value={draft.title||""} onChange={e=>set('title',e.target.value)} onBlur={blurFlush} style={inputStyle}/>
           </div>
           <div style={{display:"flex",gap:8}}>
             <div style={{flex:1}}>
@@ -686,11 +777,11 @@ function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, upl
           </div>
           <div>
             <label style={labelStyle}>Description</label>
-            <textarea rows={3} value={draft.description||""} onChange={e=>set('description',e.target.value)} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
+            <textarea rows={3} value={draft.description||""} onChange={e=>set('description',e.target.value)} onBlur={blurFlush} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
           </div>
           <div>
             <label style={labelStyle}>Caption</label>
-            <textarea rows={4} value={draft.caption||""} onChange={e=>set('caption',e.target.value)} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
+            <textarea rows={4} value={draft.caption||""} onChange={e=>set('caption',e.target.value)} onBlur={blurFlush} style={{...inputStyle,resize:"vertical",fontFamily:"inherit"}}/>
           </div>
           <div>
             <label style={labelStyle}>Format type</label>
@@ -735,11 +826,11 @@ function ConceptPanel({ conceptId, draft, setDraft, onClose, onSave, saving, upl
               </div>
               <div>
                 <label style={labelStyle}>CTA copy (optional)</label>
-                <input value={draft.story_cta_copy||""} onChange={e=>set('story_cta_copy',e.target.value)} style={inputStyle}/>
+                <input value={draft.story_cta_copy||""} onChange={e=>set('story_cta_copy',e.target.value)} onBlur={blurFlush} style={inputStyle}/>
               </div>
               <div>
                 <label style={labelStyle}>CTA link (optional)</label>
-                <input type="url" placeholder="https://" value={draft.story_cta_link||""} onChange={e=>set('story_cta_link',e.target.value)} style={inputStyle}/>
+                <input type="url" placeholder="https://" value={draft.story_cta_link||""} onChange={e=>set('story_cta_link',e.target.value)} onBlur={blurFlush} style={inputStyle}/>
               </div>
             </>
           )}
@@ -878,6 +969,50 @@ function Calendar({ onSignOut }) {
 
   const [calendarSearch, setCalendarSearch] = useState("");
 
+  const history = useHistoryStack({ cap: 50, debounceMs: 600 });
+
+  function snapshot() {
+    return { placements, conceptDetails, panelDraft, selectedConceptId };
+  }
+  function applySnapshot(snap) {
+    if (!snap) return;
+    setPlacements(snap.placements);
+    setConceptDetails(snap.conceptDetails);
+    setPanelDraft(snap.panelDraft);
+    setSelectedConceptId(snap.selectedConceptId);
+  }
+  function pushHistory(tag) {
+    history.push({ ...snapshot(), tag: tag || 'state' });
+  }
+  function pushHistoryPanelText() {
+    history.pushDebounced({ ...snapshot(), tag: 'panel-text' }, 'panel-text');
+  }
+  function doUndo() {
+    const popped = history.undo({ ...snapshot(), tag: 'cursor' });
+    applySnapshot(popped);
+  }
+  function doRedo() {
+    const popped = history.redo({ ...snapshot(), tag: 'cursor' });
+    applySnapshot(popped);
+  }
+
+  // Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z (or Cmd+Y) = redo. Skip when
+  // a text field is focused so the native input undo wins.
+  useEffect(() => {
+    const handler = (e) => {
+      const tag = e.target && e.target.tagName;
+      const editable = e.target && e.target.isContentEditable;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || editable) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); doUndo(); }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); doRedo(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history.canUndo, history.canRedo]);
+
   function startSidebarResize(e) {
     e.preventDefault();
     const onMove = (ev) => {
@@ -911,6 +1046,8 @@ function Calendar({ onSignOut }) {
   }
 
   const saveTimer = useRef(null);
+  const saveDetailsTimer = useRef(null);
+  const conceptDetailsLastSaved = useRef(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
 
@@ -920,6 +1057,7 @@ function Calendar({ onSignOut }) {
       const merged = mergeDefaults(stored);
       setPlacements(merged);
       setConceptDetails(details || {});
+      conceptDetailsLastSaved.current = details || {};
       setLoaded(true);
       // Best-effort deployment auto-sync — don't block UI or surface errors.
       syncDeploymentsFromPlacements(merged, details || {}).catch(err => {
@@ -940,6 +1078,23 @@ function Calendar({ onSignOut }) {
     }, 800);
     return () => clearTimeout(saveTimer.current);
   }, [placements, loaded]);
+
+  // Debounced save for conceptDetails — diffs against last-saved ref and
+  // upserts changed rows. Lets undo/redo persist via the same pipeline.
+  useEffect(() => {
+    if (!loaded) return;
+    if (saveDetailsTimer.current) clearTimeout(saveDetailsTimer.current);
+    saveDetailsTimer.current = setTimeout(async () => {
+      const prev = conceptDetailsLastSaved.current || {};
+      for (const id of Object.keys(conceptDetails)) {
+        if (prev[id] !== conceptDetails[id]) {
+          try { await saveConceptDetail(conceptDetails[id]); } catch(e) { console.warn(e); }
+        }
+      }
+      conceptDetailsLastSaved.current = conceptDetails;
+    }, 800);
+    return () => clearTimeout(saveDetailsTimer.current);
+  }, [conceptDetails, loaded]);
 
   // Real-time sync from other clients
   useEffect(() => {
@@ -1033,6 +1188,7 @@ function Calendar({ onSignOut }) {
   function onDropDay(e, dayId) {
     e.preventDefault(); if(!drag) return;
     const {concept, fromDay} = drag;
+    pushHistory('drag');
     setPlacements(prev => {
       const next = {...prev};
       if(fromDay) { next[fromDay]=(next[fromDay]||[]).filter(id=>id!==concept.id); if(!next[fromDay].length) delete next[fromDay]; }
@@ -1045,10 +1201,12 @@ function Calendar({ onSignOut }) {
   function onDropLib(e) {
     e.preventDefault(); if(!drag||!drag.fromDay){setDrag(null);return;}
     const {concept,fromDay}=drag;
+    pushHistory('drag');
     setPlacements(prev=>{const next={...prev};next[fromDay]=(next[fromDay]||[]).filter(id=>id!==concept.id);if(!next[fromDay].length)delete next[fromDay];return next;});
     setDrag(null);
   }
   function remove(cid, dayId) {
+    pushHistory('remove');
     setPlacements(prev=>{const next={...prev};next[dayId]=(next[dayId]||[]).filter(id=>id!==cid);if(!next[dayId].length)delete next[dayId];return next;});
   }
 
@@ -1115,12 +1273,18 @@ function Calendar({ onSignOut }) {
   }
 
   function closePanel() {
+    // Drop panel-text/media snapshots — they refer to a draft that's
+    // about to be discarded; panel-save snapshots remain valid because
+    // they represent committed conceptDetails state.
+    history.flushDebounce();
+    history.prune(e => e.tag === 'panel-text' || e.tag === 'panel-media');
     setSelectedConceptId(null);
     setPanelDraft(null);
   }
 
   async function savePanel() {
     if (!panelDraft) return;
+    pushHistory('panel-save');
     setSavingPanel(true);
     const detail = {
       id: panelDraft.id,
@@ -1140,13 +1304,19 @@ function Calendar({ onSignOut }) {
     };
     const res = await saveConceptDetail(detail);
     if (!res || !res.error) {
-      setConceptDetails(prev => ({...prev, [detail.id]: detail}));
+      setConceptDetails(prev => {
+        const next = {...prev, [detail.id]: detail};
+        // Mark as saved so the debounced effect doesn't redundantly upsert.
+        conceptDetailsLastSaved.current = next;
+        return next;
+      });
     }
     setSavingPanel(false);
   }
 
   async function handleUploadMedia(files) {
     if (!selectedConceptId) return;
+    pushHistory('panel-media');
     setUploadingMedia(true);
     try {
       const uploaded = [];
@@ -1169,6 +1339,7 @@ function Calendar({ onSignOut }) {
   }
 
   async function handleRemoveMedia(item) {
+    pushHistory('panel-media');
     if (supabase && item && item.path) {
       try { await supabase.storage.from('concept-media').remove([item.path]); } catch(e) { console.error(e); }
     }
@@ -1506,6 +1677,24 @@ function Calendar({ onSignOut }) {
             <div style={{fontSize:17,fontWeight:700,lineHeight:1.2}}>Content Calendar 2026</div>
           </div>
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4}}>
+            <div style={{display:"flex",alignItems:"center",gap:4,marginRight:8}}>
+              <button
+                type="button"
+                onClick={doUndo}
+                disabled={!history.canUndo}
+                aria-label="Undo"
+                title="Undo (⌘Z)"
+                style={{background:"transparent",border:`1px solid ${BRAND.sand}`,borderRadius:4,width:24,height:24,cursor:history.canUndo?"pointer":"default",color:history.canUndo?BRAND.paw:BRAND.sand,fontFamily:"inherit",fontSize:13,padding:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:history.canUndo?1:0.5}}
+              >↶</button>
+              <button
+                type="button"
+                onClick={doRedo}
+                disabled={!history.canRedo}
+                aria-label="Redo"
+                title="Redo (⇧⌘Z)"
+                style={{background:"transparent",border:`1px solid ${BRAND.sand}`,borderRadius:4,width:24,height:24,cursor:history.canRedo?"pointer":"default",color:history.canRedo?BRAND.paw:BRAND.sand,fontFamily:"inherit",fontSize:13,padding:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:history.canRedo?1:0.5}}
+              >↷</button>
+            </div>
             <div style={{display:"flex",alignItems:"center",gap:6,marginRight:8}}>
               <div style={{position:"relative"}}>
                 <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:12,color:BRAND.drySage,pointerEvents:"none"}}>⌕</span>
@@ -1700,6 +1889,8 @@ function Calendar({ onSignOut }) {
         onRemoveMedia={handleRemoveMedia}
         placementDays={selectedConceptId ? getPlacementDays(selectedConceptId) : []}
         onJumpToPlacement={jumpToPlacement}
+        onBeforeEdit={pushHistoryPanelText}
+        onPanelEditBlur={history.flushDebounce}
       />
     </div>
   );
